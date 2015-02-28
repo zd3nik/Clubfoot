@@ -10,6 +10,11 @@ INCLUDEPATH += senjo/src
 unix:QMAKE_CXXFLAGS += -std=c++11
 unix::LIBS += -lpthread
 
+CONFIG(release, debug|release) {
+  message(Release build!)
+  DEFINES += NDEBUG
+}
+
 # deploy epd files with each build
 include(epd.pri)
 
