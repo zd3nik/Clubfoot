@@ -94,7 +94,9 @@ public:
   Move(const Move& other)
     : bits(other.bits),
       score(other.score)
-  { }
+  {
+    assert(abs(score) <= Infinity);
+  }
 
   //--------------------------------------------------------------------------
   //! \brief Initialize this move
@@ -102,6 +104,7 @@ public:
   //! \param score The move score
   //--------------------------------------------------------------------------
   void Init(const uint32_t bits, const int score) {
+    assert(abs(score) <= Infinity);
     this->bits = bits;
     this->score = static_cast<int32_t>(score);
   }
@@ -124,6 +127,7 @@ public:
             const int promo = 0,
             const int score = 0)
   {
+    assert(abs(score) <= Infinity);
     bits = (static_cast<uint32_t>(type)                             |
             static_cast<uint32_t>((from  & EightBits) << FromShift) |
             static_cast<uint32_t>((to    & EightBits) << ToShift)   |
@@ -156,14 +160,6 @@ public:
   //! \return A reference to this move's score value
   //--------------------------------------------------------------------------
   int& Score() {
-    return score;
-  }
-
-  //--------------------------------------------------------------------------
-  //! \brief Get this move's score value
-  //! \return A this move's score value
-  //--------------------------------------------------------------------------
-  int Score() const {
     return score;
   }
 
@@ -243,8 +239,8 @@ public:
   //! \brief Is this move initialized?
   //! \return true if this move has type, from, and to values
   //--------------------------------------------------------------------------
-  bool IsValid() const
-  { return (GetType() && (GetFromName() != GetToName()));
+  bool IsValid() const {
+    return (GetType() && (GetFromName() != GetToName()));
   }
 
   //--------------------------------------------------------------------------

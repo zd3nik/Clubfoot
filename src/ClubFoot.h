@@ -2965,7 +2965,7 @@ private:
   template<Color color>
   void UpdateTT(const Move* move, const int depth, const int score) {
     if (move && (depth > 0)) {
-      assert(move->Score() == score);
+      assert(move->GetScore() == score);
       _tt.Store(positionKey, *move, depth, HashEntry::ExactScore);
       if (child && (depth > 1)) {
         Exec<color>(*move, *child);
