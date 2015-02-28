@@ -74,7 +74,7 @@ public:
   //! \return true if the score of move \p a is less than the score of move \p b
   //--------------------------------------------------------------------------
   static bool ScoreCompare(const Move& a, const Move& b) {
-    return (a.score, b.score);
+    return (a.score < b.score);
   }
 
   //--------------------------------------------------------------------------

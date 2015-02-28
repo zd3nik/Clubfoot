@@ -80,7 +80,7 @@ public:
   //--------------------------------------------------------------------------
   //! Constructor
   //--------------------------------------------------------------------------
-  ClubFoot::ClubFoot()
+  ClubFoot()
     : ply(0),
       child(NULL),
       parent(NULL)
@@ -1636,7 +1636,7 @@ private:
   //--------------------------------------------------------------------------
   //! Get midgame multiplier (ratio to use on midgame-only score values)
   //--------------------------------------------------------------------------
-  float ClubFoot::MidGame(const Color color) const {
+  float MidGame(const Color color) const {
     return (static_cast<float>(material[!color]) / StartMaterial);
   }
 
@@ -1695,6 +1695,8 @@ private:
       if (_board[sqr.Name() + (color ? senjo::South : senjo::North)]) {
         score -= 16;
       }
+      break;
+    default:
       break;
     }
 
@@ -2060,6 +2062,8 @@ private:
           case ((!color)|Pawn): val -= 4; break;
         }
         break;
+      default:
+        break;
       }
       if (val) {
         score += static_cast<int>(MidGame(color) * val);
@@ -2152,7 +2156,7 @@ private:
                         typeCount[Black|Queen] ||
                        (typeCount[Black|Knight] && typeCount[Black|Bishop]));
 
-    if (!whiteCanWin && !blackCanWin || (rcount >= 100)) {
+    if ((!whiteCanWin && !blackCanWin) || (rcount >= 100)) {
       state |= Draw;
       return (eval = 0);
     }
@@ -3086,14 +3090,14 @@ private:
             if (move->Score() >= beta) {
               assert(move->Score() < Infinity);
               beta = std::min<int>((move->Score() + delta), Infinity);
-              if ((Now() - _startTime) > 1000) {
+              if ((senjo::Now() - _startTime) > 1000) {
                 OutputPV(move->Score(), 1); // report lowerbound
               }
             }
             else {
               assert(move->Score() > -Infinity);
               alpha = std::max<int>((move->Score() - delta), -Infinity);
-              if ((Now() - _startTime) > 1000) {
+              if ((senjo::Now() - _startTime) > 1000) {
                 OutputPV(move->Score(), -1); // report upperbound
               }
             }
