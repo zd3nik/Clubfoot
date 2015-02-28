@@ -2158,8 +2158,15 @@ private:
     }
 
     // reduce winning score if "winning" side can't win
-    if ((eval > 0) ? !whiteCanWin : !blackCanWin) {
-      eval = std::max<int>(50, (eval / 4));
+    if (eval > 0) {
+      if (!whiteCanWin) {
+        eval = std::min<int>(50, (eval / 4));
+      }
+    }
+    else if (eval < 0) {
+      if (!blackCanWin) {
+        eval = std::max<int>(-50, (eval / 40));
+      }
     }
 
     // return coarse-grain score so we don't flip flop line selection
