@@ -2786,11 +2786,6 @@ private:
       if (_stop || !pvCount) {
         return iid;
       }
-      if (!pvNode && (iid >= beta) &&
-          ((eval >= beta) || ((color ? -Evaluate() : Evaluate()) >= beta)))
-      {
-        return beta;
-      }
       assert(pv[0].IsValid());
       firstMove = pv[0];
     }
