@@ -2925,21 +2925,21 @@ private:
       }
       if (move->Score() > best) {
         UpdatePV(*move);
-        pvDepth = newDepth = (depth - reduced);
+        pvDepth = (depth - reduced);
         if (move->Score() >= beta) {
           if (!move->IsCapOrPromo()) {
-            IncHistory(*move, check, newDepth);
+            IncHistory(*move, check, pvDepth);
             AddKiller(*move);
           }
-          _tt.Store(positionKey, *move, newDepth, HashEntry::LowerBound);
+          _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound);
           return move->Score();
         }
         if (move->Score() > alpha) {
           alpha = move->Score();
           if (!move->IsCapOrPromo()) {
-            IncHistory(*move, check, newDepth);
+            IncHistory(*move, check, pvDepth);
           }
-          _tt.Store(positionKey, *move, newDepth, HashEntry::ExactScore);
+          _tt.Store(positionKey, *move, pvDepth, HashEntry::ExactScore);
         }
         best = move->Score();
       }

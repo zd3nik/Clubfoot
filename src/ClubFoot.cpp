@@ -824,13 +824,15 @@ std::string ClubFoot::MyGo(const int depth,
   std::string bestmove = (WhiteToMove() ? SearchRoot<White>(d)
                                         : SearchRoot<Black>(d));
 
-  Output() << _tt.GetStores() << " stores, " << _tt.GetHits() << " hits, "
-           << _tt.GetCheckmates() << " checkmates, "
-           << _tt.GetStalemates() << " stalemates";
+  if (_debug) {
+    Output() << _tt.GetStores() << " stores, " << _tt.GetHits() << " hits, "
+             << _tt.GetCheckmates() << " checkmates, "
+             << _tt.GetStalemates() << " stalemates";
 
-  if (_nmp) {
-    Output() << _nullMoves << " null moves, "
-             << _nmCutoffs << " cutoffs";
+    if (_nmp) {
+      Output() << _nullMoves << " null moves, "
+               << _nmCutoffs << " cutoffs";
+    }
   }
 
   return bestmove;
