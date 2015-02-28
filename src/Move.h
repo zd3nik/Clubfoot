@@ -61,7 +61,7 @@ public:
   //! \brief Compare two moves lexically
   //! \param a The left move
   //! \param b The righ move
-  //! \return true if move \a has a lower lexical value than move \b
+  //! \return true if move \p a has a lower lexical value than move \p b
   //--------------------------------------------------------------------------
   static bool LexicalCompare(const Move& a, const Move& b) {
     return (strcmp(a.ToString().c_str(), b.ToString().c_str()) < 0);
@@ -71,7 +71,7 @@ public:
   //! \brief Compare the score of two moves
   //! \param a The left move
   //! \param b The right move
-  //! \return true if the score of move \a is less than the score of move \b
+  //! \return true if the score of move \p a is less than the score of move \p b
   //--------------------------------------------------------------------------
   static bool ScoreCompare(const Move& a, const Move& b) {
     return (a.score, b.score);
