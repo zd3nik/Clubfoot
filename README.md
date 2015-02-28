@@ -3,21 +3,19 @@ Clubfoot
 
 By Shawn Chidester <zd3nik@gmail.com>
 
-This is a very basic chess engine that started as an example for the [Senjo UCI adapter](https://github.com/zd3nik/SenjoUCIAdapter).  It has never been my purpose to make this a serious engine.  I wanted it to be as small as possible, written in a way that easy to comprehend, but still play a reasonable game of chess.  I was also thinking the simplistic code base would be an ideal way to provide real-world examples of some common chess engine programming concepts such as 0x88 board representation, transposition table, killer move heuristic, null move pruning, etc.  I suppose it might serve that purpose to some degree, but even the simplest and most common chess engine concepts can be implemented in vastly differing ways.  So, in retrospect, I've stricken that purpose from the list of Clubfoot's objectives.
+This is a very basic chess engine that started as an example for the [Senjo UCI adapter](https://github.com/zd3nik/SenjoUCIAdapter).  It has never been my purpose to make this a serious engine.  I wanted it to be as small as possible, written in a way that is easy to comprehend, yet still capable of playing a reasonable game of chess.  I was also thinking the simplistic code base would be an ideal way to provide real-world examples of some common chess engine programming concepts such as 0x88 board representation, transposition table, killer move heuristic, null move pruning, etc.  I suppose it might serve that purpose to some degree, but even the simplest and most common chess engine concepts can be implemented in vastly differing ways.  So, in retrospect, I've stricken that purpose from the list of Clubfoot's objectives.
 
-There are many aspects of this engine that could be vastly improved with a little effort, particularly in the area of static positional analysis and threat detection.  But to challenge myself I decided to see how far I could take it sticking to the pure 0x88 board techniques - e.g. no bitboards.  This is my first 0x88 chess engine so there are likely several tricks that I'm unaware of.  So this is a learning experience for me and I welcome any enhancements that do not morph Clubfoot into a bitboard engine.
+There are many aspects of this engine that could be vastly improved with a little effort, particularly in the area of static positional analysis and threat detection.  To challenge myself I've decided to see how far I could take it sticking to pure 0x88 board techniques - e.g. no bitboards.  This is my first 0x88 chess engine so there are likely several tricks that I'm unaware of.  This is a learning experience for me and I welcome any enhancements that do not morph Clubfoot into a bitboard engine.
 
 I'm also thinking that as long as Clubfoot sticks to the minimal basics it may come in handy as a sort of entry level benchmark for testing other engines (that's what I will be using it for anyway).  It may also serve very well as a sparing partner for budding human chess players.
 
-All preamble aside, this is a free and open source project.  You're free to use it and modify it in any way you wish.  Just please take the objectives I've stated above into consideration if you want to submit changes back on the master branch.
-
+All preamble aside, this is a free and open source project.  Use it in any way you wish.  Just please take the objectives I've stated above into consideration if you want to submit changes back on the master branch.
 
 ### Use recursive clone
 
 Since Clubfoot uses the [Senjo UCI adapter](https://github.com/zd3nik/SenjoUCIAdapter) as a sub-module be sure to use the --recursive option when cloning.  See [Git - Submodules](http://git-scm.com/book/en/v2/Git-Tools-Submodules) for more information.
 
 `git clone --recursive https://github.com/zd3nik/Clubfoot.git`
-
 
 Features
 --------
