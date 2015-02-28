@@ -2894,7 +2894,7 @@ private:
           (_hist[move->GetHistoryIndex()] < 0) &&
           !child->KingInCheck<!color>())
       {
-        reduced += (1 + (!pvNode && cutNode));
+        reduced += (1 + (cutNode || (move->GetScore() <= -120)));
         newDepth -= reduced;
       }
 
