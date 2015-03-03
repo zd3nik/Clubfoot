@@ -88,7 +88,7 @@ enum Misc {
 
 enum CheckState {
   Unknown,
-  InCheck,
+  IsInCheck,
   NotInCheck
 };
 

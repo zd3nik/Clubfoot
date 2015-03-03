@@ -35,37 +35,7 @@ namespace clubfoot
 static const std::string _TRUE = "true";
 
 //----------------------------------------------------------------------------
-// static ClubFoot class variables
-//----------------------------------------------------------------------------
-bool                ClubFoot::_initialized = false;
-bool                ClubFoot::_ext = false;
-bool                ClubFoot::_iid = false;
-bool                ClubFoot::_lmr = false;
-bool                ClubFoot::_nmp = false;
-char                ClubFoot::_hist[0x100000] = {0};
-int                 ClubFoot::_board[128] = {0};
-int                 ClubFoot::_depth = 0;
-int                 ClubFoot::_movenum = 0;
-int                 ClubFoot::_seldepth = 0;
-std::string         ClubFoot::_currmove;
-int64_t             ClubFoot::_hashSize = 0;
-uint64_t            ClubFoot::_execs = 0;
-uint64_t            ClubFoot::_qnodes = 0;
-uint64_t            ClubFoot::_nullMoves = 0;
-uint64_t            ClubFoot::_nmCutoffs = 0;
-ClubFoot            ClubFoot::_node[MaxPlies];
-std::set<uint64_t>  ClubFoot::_seen;
-TranspositionTable  ClubFoot::_tt;
-
-EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
-EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
-EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
-
-//----------------------------------------------------------------------------
-const int ClubFoot::KING_SQR[128] = {
+const int ClubFoot::_KING_SQR[128] = {
     //------- MiddleGame --------     ---------- EndGame ----------
     0, 12, 12, -8, -8, -8, 12,  0,  -50,-24,-12, -8, -8,-12,-24,-50,
    -8, -8,-12,-12,-12,-12, -8, -8,  -24,-12, -8,  0,  0, -8,-12,-24,
@@ -78,7 +48,7 @@ const int ClubFoot::KING_SQR[128] = {
 };
 
 //----------------------------------------------------------------------------
-const int ClubFoot::PIECE_SQR[12][128] = {
+const int ClubFoot::_PIECE_SQR[12][128] = {
   { // White
     0,  0,  0,  0,  0,  0,  0,  0,  0,0,0,0,0,0,0,0,
     0,  0,  0,  0,  0,  0,  0,  0,  0,0,0,0,0,0,0,0,
@@ -200,6 +170,36 @@ const int ClubFoot::PIECE_SQR[12][128] = {
   -50,-12, -8, -8, -8, -8,-12,-50,  0,0,0,0,0,0,0,0
   }
 };
+
+//----------------------------------------------------------------------------
+// static ClubFoot class variables
+//----------------------------------------------------------------------------
+bool                ClubFoot::_initialized = false;
+bool                ClubFoot::_ext = false;
+bool                ClubFoot::_iid = false;
+bool                ClubFoot::_lmr = false;
+bool                ClubFoot::_nmp = false;
+char                ClubFoot::_hist[0x100000] = {0};
+int                 ClubFoot::_board[128] = {0};
+int                 ClubFoot::_depth = 0;
+int                 ClubFoot::_movenum = 0;
+int                 ClubFoot::_seldepth = 0;
+std::string         ClubFoot::_currmove;
+int64_t             ClubFoot::_hashSize = 0;
+uint64_t            ClubFoot::_execs = 0;
+uint64_t            ClubFoot::_qnodes = 0;
+uint64_t            ClubFoot::_nullMoves = 0;
+uint64_t            ClubFoot::_nmCutoffs = 0;
+ClubFoot            ClubFoot::_node[MaxPlies];
+std::set<uint64_t>  ClubFoot::_seen;
+TranspositionTable  ClubFoot::_tt;
+
+EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
+EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
+EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
@@ -452,7 +452,7 @@ const char* ClubFoot::SetPosition(const char* fen)
     const int y = TO_Y(*p++);
     epSquare.Assign(x, y);
     if (y != ((boardState & Black) ? 2 : 5)) {
-      Output() << "Invalid en passant square: " << ep.ToString();
+      Output() << "Invalid en passant square: " << epSquare.ToString();
       return NULL;
     }
   }
@@ -567,25 +567,12 @@ const char* ClubFoot::MakeMove(const char* str)
   }
 
   if (WhiteToMove()) {
-    Exec<White>(moves[moveIndex], _node[0]);
+    Exec<White>(moves[moveIndex], *this);
   }
   else {
-    Exec<Black>(moves[moveIndex], _node[0]);
+    Exec<Black>(moves[moveIndex], *this);
   }
 
-  king[White]     = _node[0].king[White];
-  king[Black]     = _node[0].king[Black];
-  material[White] = _node[0].material[White];
-  material[Black] = _node[0].material[Black];
-  mcount          = _node[0].mcount;
-  rcount          = _node[0].rcount;
-  state           = _node[0].state;
-  ep              = _node[0].ep;
-  checkState      = _node[0].checkState;
-  pieceKey        = _node[0].pieceKey;
-  positionKey     = _node[0].positionKey;
-
-  Evaluate();
   return p;
 }
 
@@ -719,7 +706,7 @@ void ClubFoot::PrintBoard() const
       break;
 
     case 0:
-      out << "  Static Evaluation : " << eval;
+      out << "  Static Evaluation : " << standPat;
       break;
     }
     out << '\n';
@@ -746,6 +733,15 @@ void ClubFoot::ClearSearchData()
 void ClubFoot::PonderHit()
 {
   // ponder not supported
+}
+
+//----------------------------------------------------------------------------
+void ClubFoot::Quit() {
+  // stop searching and exit the timer thread
+  senjo::ChessEngine::Quit();
+
+  // free up memory allocated for the transposition table
+  SetHashSize(0);
 }
 
 //----------------------------------------------------------------------------

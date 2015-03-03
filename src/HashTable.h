@@ -226,6 +226,9 @@ public:
     }
   }
 
+  //--------------------------------------------------------------------------
+  //! Set all transposition table counters to zero
+  //--------------------------------------------------------------------------
   void ResetCounters() {
     _stores = 0;
     _hits = 0;
@@ -233,10 +236,37 @@ public:
     _stalemates = 0;
   }
 
-  uint64_t GetStores() const { return _stores; }
-  uint64_t GetHits() const { return _hits; }
-  uint64_t GetCheckmates() const { return _checkmates; }
-  uint64_t GetStalemates() const { return _stalemates; }
+  //--------------------------------------------------------------------------
+  //! Get number of position+bestmove entries stored since last reset
+  //! \return The number of position+bestmove entries stored since last reset
+  //--------------------------------------------------------------------------
+  uint64_t GetStores() const {
+    return _stores;
+  }
+
+  //--------------------------------------------------------------------------
+  //! Get number of successful probes since last reset
+  //! \return The number of successful probes since last reset
+  //--------------------------------------------------------------------------
+  uint64_t GetHits() const {
+    return _hits;
+  }
+
+  //--------------------------------------------------------------------------
+  //! Get the number of checkmates stored
+  //! \return The number of checkmates stored
+  //--------------------------------------------------------------------------
+  uint64_t GetCheckmates() const {
+    return _checkmates;
+  }
+
+  //--------------------------------------------------------------------------
+  //! Get the number of stalemates stored
+  //! \return The number of stalemates stored
+  //--------------------------------------------------------------------------
+  uint64_t GetStalemates() const {
+    return _stalemates;
+  }
 
 private:
   static uint64_t _stores;

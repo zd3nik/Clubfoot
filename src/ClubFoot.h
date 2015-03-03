@@ -57,6 +57,7 @@ public:
   bool WhiteToMove() const;
   void ClearSearchData();
   void PonderHit();
+  void Quit();
   void GetStats(int* depth,
                 int* seldepth = NULL,
                 uint64_t* nodes = NULL,
@@ -65,29 +66,6 @@ public:
                 int* movenum = NULL,
                 char* move = NULL,
                 const size_t movelen = 0) const;
-
-  //--------------------------------------------------------------------------
-  //! Override senjo::ChessEngine::Quit to do some cleanup
-  //--------------------------------------------------------------------------
-  void Quit() {
-    // stop searching and exit the timer thread
-    senjo::ChessEngine::Quit();
-
-    // free up memory allocated for the transposition table
-    SetHashSize(0);
-  }
-
-  //--------------------------------------------------------------------------
-  //! Constructor
-  //--------------------------------------------------------------------------
-  ClubFoot()
-    : ply(0),
-      child(NULL),
-      parent(NULL)
-  {
-    // don't call Initialize() here
-    // multiple ClubFoot classes will be constructed in the '_node' array
-  }
 
 protected:
   //--------------------------------------------------------------------------
@@ -102,6 +80,12 @@ protected:
                    std::string* ponder = NULL);
 
 private:
+  //--------------------------------------------------------------------------
+  // global constants
+  //--------------------------------------------------------------------------
+  static const int _KING_SQR[128];      // king-square value table
+  static const int _PIECE_SQR[12][128]; // piece-square value table
+
   //--------------------------------------------------------------------------
   // global variables
   //--------------------------------------------------------------------------
@@ -132,12 +116,6 @@ private:
   static senjo::EngineOption _optNMP;         // null move pruning option
 
   //--------------------------------------------------------------------------
-  // global constants
-  //--------------------------------------------------------------------------
-  static const int KING_SQR[128];      // king-square value table
-  static const int PIECE_SQR[12][128]; // piece-square value table
-
-  //--------------------------------------------------------------------------
   // position related variables (updated by Exec)
   //--------------------------------------------------------------------------
   int           king[2];     // king position for each color
@@ -154,7 +132,7 @@ private:
   // other variables
   //--------------------------------------------------------------------------
   int       ply;             // which ply is this node at?
-  int       eval;            // positional evaluation from White's perspective
+  int       standPat;        // positional eval from perspective of side to move
   int       pieceCount;      // how many pieces does the side to move have?
   int       extended;        // plies the search at this node was extended
   int       reduced;         // plies the search at this node was reduced
@@ -172,7 +150,7 @@ private:
   //--------------------------------------------------------------------------
   //! Get the value of a given piece type
   //--------------------------------------------------------------------------
-  static int ValueOf(const int piece) {
+  static inline int ValueOf(const int piece) {
     static const int VALUE[] = {
       0,           0,
       PawnValue,   PawnValue,
@@ -190,7 +168,7 @@ private:
   //--------------------------------------------------------------------------
   //! Used to update castling rights effected by touching a given square
   //--------------------------------------------------------------------------
-  static int Touch(const int square) {
+  static inline int Touch(const int square) {
     static const int TOUCH[] = {
       WhiteLong, 0, 0, 0, WhiteCastleMask, 0, 0, WhiteShort, 0,0,0,0,0,0,0,0,
       0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
@@ -209,7 +187,7 @@ private:
   //--------------------------------------------------------------------------
   //! Is it white's move or black's move in the position at this node?
   //--------------------------------------------------------------------------
-  Color ColorToMove() const {
+  inline Color ColorToMove() const {
     return static_cast<Color>(COLOR_OF(state));
   }
 
@@ -251,8 +229,8 @@ private:
   //--------------------------------------------------------------------------
   //! Increment performance history for the given move
   //--------------------------------------------------------------------------
-  void IncHistory(const Move& move, const bool inCheck, const int depth) {
-    if (!inCheck && (depth > 0)) {
+  inline void IncHistory(const Move& move, const bool check, const int depth) {
+    if (!check && (depth > 0)) {
       const int idx = move.GetHistoryIndex();
       const int val = (_hist[idx] + depth);
       _hist[idx] = static_cast<char>(std::min<int>(val, 100));
@@ -262,8 +240,8 @@ private:
   //--------------------------------------------------------------------------
   //! Decrement performance history for the given move
   //--------------------------------------------------------------------------
-  void DecHistory(const Move& move, const bool inCheck) {
-    if (!inCheck) {
+  inline void DecHistory(const Move& move, const bool check) {
+    if (!check) {
       const int idx = move.GetHistoryIndex();
       const int val = (_hist[idx] - 1);
       _hist[idx] = static_cast<char>(std::max<int>(val, -100));
@@ -273,7 +251,7 @@ private:
   //--------------------------------------------------------------------------
   //! Add a move to the killer list for this node - replaces oldest (if any).
   //--------------------------------------------------------------------------
-  void AddKiller(const Move& move) {
+  inline void AddKiller(const Move& move) {
     if (move != killer[0]) {
       killer[1] = killer[0];
       killer[0] = move;
@@ -283,7 +261,7 @@ private:
   //--------------------------------------------------------------------------
   //! Is the given move one of the killer moves at this node?
   //--------------------------------------------------------------------------
-  bool IsKiller(const Move& move) const {
+  inline bool IsKiller(const Move& move) const {
     return ((move == killer[0]) || (move == killer[1]));
   }
 
@@ -291,7 +269,7 @@ private:
   //! Set a new principal variation on this node
   //! \param move First move of the new PV, remaining moves from 'child->pv'
   //--------------------------------------------------------------------------
-  void UpdatePV(const Move& move) {
+  inline void UpdatePV(const Move& move) {
     pv[0] = move;
     if (child) {
       if ((pvCount = (child->pvCount + 1)) > 1) {
@@ -357,7 +335,7 @@ private:
   //--------------------------------------------------------------------------
   //! Get the next move from this node's 'moves' array.
   //--------------------------------------------------------------------------
-  Move* GetNextMove() {
+  inline Move* GetNextMove() {
     assert(moveIndex >= 0);
     assert((moveCount >= 0) && (moveCount < MaxMoves));
 
@@ -366,10 +344,10 @@ private:
     }
 
     int best_index = moveIndex;
-    int best_score = moves[moveIndex].Score();
+    int best_score = moves[moveIndex].GetScore();
     for (int i = (moveIndex + 1); i < moveCount; ++i) {
-      if (moves[i].Score() > best_score) {
-        best_score = moves[i].Score();
+      if (moves[i].GetScore() > best_score) {
+        best_score = moves[i].GetScore();
         best_index = i;
       }
     }
@@ -386,7 +364,7 @@ private:
   //! Is the given square attacked by the specified color?
   //--------------------------------------------------------------------------
   template<Color color>
-  bool AttackedBy(const senjo::Square& sqr) const {
+  inline bool AttackedBy(const senjo::Square& sqr) const {
     static const senjo::Direction DIRECTIONS[8] = {
       senjo::SouthWest, senjo::South,
       senjo::SouthEast, senjo::West,
@@ -473,20 +451,28 @@ private:
   }
 
   //--------------------------------------------------------------------------
+  //! Is the position at this node a draw?
+  //! \return True if the position at this node is a draw
+  //--------------------------------------------------------------------------
+  inline bool IsDraw() const {
+    return (state & Draw);
+  }
+
+  //--------------------------------------------------------------------------
   //! Is the king of the side to move in check?
   //--------------------------------------------------------------------------
   template<Color color>
-  bool KingInCheck() {
+  inline bool InCheck() {
     assert(color == ColorToMove());
     if (checkState == CheckState::Unknown) {
       if (AttackedBy<!color>(king[color])) {
-        checkState = InCheck;
+        checkState = IsInCheck;
       }
       else {
         checkState = NotInCheck;
       }
     }
-    return (checkState == InCheck);
+    return (checkState == IsInCheck);
   }
 
   //--------------------------------------------------------------------------
@@ -495,7 +481,7 @@ private:
   //! \return senjo::Square::None if no piece attacking \p to square
   //--------------------------------------------------------------------------
   template<Color color>
-  int SmallestAttacker(const senjo::Square& to) const {
+  inline int SmallestAttacker(const senjo::Square& to) const {
     static const senjo::Direction DIRECTIONS[8] = {
       senjo::SouthWest, senjo::SouthEast,
       senjo::NorthWest, senjo::NorthEast,
@@ -625,11 +611,11 @@ private:
   //! Append a new move to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color>
-  void AddMove(const senjo::Square& from,
-               const senjo::Square& to,
-               const Move::MoveType mtype,
-               const int cap = 0,
-               const int promo = PieceType::NoPiece)
+  inline void AddMove(const senjo::Square& from,
+                      const senjo::Square& to,
+                      const Move::MoveType mtype,
+                      const int cap = 0,
+                      const int promo = PieceType::NoPiece)
   {
     assert((moveCount + 1) < MaxMoves);
     assert(from.IsValid());
@@ -687,9 +673,9 @@ private:
   //! Is the given move illegal due to king pin?
   //--------------------------------------------------------------------------
   template<Color color>
-  bool Pinned(const senjo::Square& from,
-              const senjo::Square& to,
-              const Move::MoveType type) const
+  inline bool Pinned(const senjo::Square& from,
+                     const senjo::Square& to,
+                     const Move::MoveType type) const
   {
     int piece = 0;
     senjo::Square sqr;
@@ -913,7 +899,7 @@ private:
   //! \return false if not in check and therefore no moves generated
   //--------------------------------------------------------------------------
   template<Color color>
-  bool GetCheckEvasions() {
+  inline bool GetCheckEvasions() {
     static const senjo::Direction DIRECTIONS[16] = {
       senjo::KnightMove1, senjo::KnightMove2,
       senjo::KnightMove3, senjo::KnightMove4,
@@ -1172,7 +1158,7 @@ private:
       break;
     }
 
-    checkState = InCheck;
+    checkState = IsInCheck;
     return true;
   }
 
@@ -1181,7 +1167,7 @@ private:
   //! If 'underpromote' template parameter is false only queen promotions added
   //--------------------------------------------------------------------------
   template<Color color, bool underpromote>
-  void GetPromos(const senjo::Square& from) {
+  inline void GetPromos(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[2] = {
       (color ? senjo::SouthWest : senjo::NorthWest),
       (color ? senjo::SouthEast : senjo::NorthEast)
@@ -1224,7 +1210,7 @@ private:
   //! Add pawn captures, including en passant, to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color>
-  void GetPawnCaps(const senjo::Square& from) {
+  inline void GetPawnCaps(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[2] = {
       (color ? senjo::SouthWest : senjo::NorthWest),
       (color ? senjo::SouthEast : senjo::NorthEast)
@@ -1258,7 +1244,7 @@ private:
   //! Add pawn moves that give check to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color>
-  void GetPawnChecks(const senjo::Square& from) {
+  inline void GetPawnChecks(const senjo::Square& from) {
     senjo::Square to;
     if (!(to = (from + (color ? senjo::South : senjo::North))) ||
         _board[to.Name()] || Pinned<color>(from, to, Move::PawnPush))
@@ -1289,7 +1275,7 @@ private:
   //! Add non-volatile pawn moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color>
-  void GetPawnMoves(const senjo::Square& from) {
+  inline void GetPawnMoves(const senjo::Square& from) {
     senjo::Square to;
     if (!(to = (from + (color ? senjo::South : senjo::North))) ||
         _board[to.Name()] || Pinned<color>(from, to, Move::PawnPush))
@@ -1309,7 +1295,7 @@ private:
   //! Add knight moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color, MoveGenType type>
-  void GetKnightMoves(const senjo::Square& from) {
+  inline void GetKnightMoves(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[8] = {
       senjo::KnightMove1, senjo::KnightMove2,
       senjo::KnightMove3, senjo::KnightMove4,
@@ -1347,7 +1333,7 @@ private:
   //! Add bishop moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color, MoveGenType type>
-  void GetBishopMoves(const senjo::Square& from) {
+  inline void GetBishopMoves(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[4] = {
       senjo::SouthWest, senjo::SouthEast,
       senjo::NorthWest, senjo::NorthEast
@@ -1392,7 +1378,7 @@ private:
   //! Add rook moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color, MoveGenType type>
-  void GetRookMoves(const senjo::Square& from) {
+  inline void GetRookMoves(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[4] = {
       senjo::South, senjo::West,
       senjo::East,  senjo::North
@@ -1437,7 +1423,7 @@ private:
   //! Add queen moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color, MoveGenType type>
-  void GetQueenMoves(const senjo::Square& from) {
+  inline void GetQueenMoves(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[8] = {
       senjo::SouthWest, senjo::South,
       senjo::SouthEast, senjo::West,
@@ -1484,7 +1470,7 @@ private:
   //! Add king moves to this node's 'moves' array
   //--------------------------------------------------------------------------
   template<Color color, MoveGenType type>
-  void GetKingMoves(const senjo::Square& from) {
+  inline void GetKingMoves(const senjo::Square& from) {
     static const senjo::Direction DIRECTIONS[8] = {
       senjo::SouthWest, senjo::South,
       senjo::SouthEast, senjo::West,
@@ -1554,7 +1540,7 @@ private:
   //! If 'qsearch' template parameter is true only volatile moves are generated
   //--------------------------------------------------------------------------
   template<Color color, bool qsearch>
-  void GenerateMoves(const int depth) {
+  inline void GenerateMoves(const int depth) {
     assert(color == ColorToMove());
     moveIndex = moveCount = 0;
 
@@ -1629,28 +1615,28 @@ private:
   //--------------------------------------------------------------------------
   //! Get endgame multiplier (ratio to use on endgame-only score values)
   //--------------------------------------------------------------------------
-  float EndGame(const Color color) const {
+  inline float EndGame(const Color color) const {
     return (static_cast<float>(StartMaterial-material[!color])/StartMaterial);
   }
 
   //--------------------------------------------------------------------------
   //! Get midgame multiplier (ratio to use on midgame-only score values)
   //--------------------------------------------------------------------------
-  float MidGame(const Color color) const {
+  inline float MidGame(const Color color) const {
     return (static_cast<float>(material[!color]) / StartMaterial);
   }
 
   //--------------------------------------------------------------------------
   //! Get static positional value of a given piece type on a given square
   //--------------------------------------------------------------------------
-  int SquareValue(const int pc, const int sqr) const {
+  inline int SquareValue(const int pc, const int sqr) const {
     assert((pc >= (White|Pawn)) && (pc <= (Black|King)));
     assert(senjo::Square(sqr).IsValid());
     if (pc < King) {
-      return PIECE_SQR[pc][sqr];
+      return _PIECE_SQR[pc][sqr];
     }
-    const float mid = (MidGame(COLOR_OF(pc)) * KING_SQR[sqr]);
-    const float end = (EndGame(COLOR_OF(pc)) * KING_SQR[sqr + 8]);
+    const float mid = (MidGame(COLOR_OF(pc)) * _KING_SQR[sqr]);
+    const float end = (EndGame(COLOR_OF(pc)) * _KING_SQR[sqr + 8]);
     return static_cast<int>(mid + end);
   }
 
@@ -1658,7 +1644,7 @@ private:
   //! Calculate the positional value of the pawn on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int PawnEval(const senjo::Square& sqr) {
+  inline int PawnEval(const senjo::Square& sqr) {
     senjo::Square tmp;
     bool passed = true; // set to false below if not passed
     int score = SquareValue((color|Pawn), sqr.Name());
@@ -1801,7 +1787,7 @@ private:
   //! Calculate the positional value of the knight on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int KnightEval(const senjo::Square& sqr) {
+  inline int KnightEval(const senjo::Square& sqr) {
     int score = SquareValue((color|Knight), sqr.Name());
 
     // keep the knight close to the action
@@ -1815,7 +1801,7 @@ private:
   //! Calculate the positional value of the bishop on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int BishopEval(const senjo::Square& sqr) {
+  inline int BishopEval(const senjo::Square& sqr) {
     int score = SquareValue((color|Bishop), sqr.Name());
 
     // stay close to fiendly king during endgame
@@ -1838,7 +1824,7 @@ private:
   //! Calculate the positional value of the rook on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int RookEval(const senjo::Square& sqr) {
+  inline int RookEval(const senjo::Square& sqr) {
     int score = SquareValue((color|Rook), sqr.Name());
 
     // stay close to fiendly king during endgame
@@ -1881,7 +1867,7 @@ private:
   //! Calculate the positional value of the queen on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int QueenEval(const senjo::Square& sqr) {
+  inline int QueenEval(const senjo::Square& sqr) {
     int score = SquareValue((color|Queen), sqr.Name());
 
     // the queen is almost an entirely tactical piece.  There are some positional
@@ -1895,7 +1881,7 @@ private:
   //! Calculate the positional value of the king on the given square
   //--------------------------------------------------------------------------
   template<Color color>
-  int KingEval(const senjo::Square& sqr) {
+  inline int KingEval(const senjo::Square& sqr) {
     assert(sqr == king[color]);
     senjo::Square tmp;
     int score = SquareValue((color|King), sqr.Name());
@@ -2082,13 +2068,13 @@ private:
   //! calculations such as piece mobility and threat detection feasible,
   //! very minimal evaluation techniques are used in Clubfoot.
   //--------------------------------------------------------------------------
-  int Evaluate() {
+  inline void Evaluate() {
     int typeCount[14] = {0};
     int pieceStack[32];
     int stackCount = 0;
     int pc;
+    int eval = (material[White] - material[Black]);
 
-    eval = (material[White] - material[Black]);
     pieceCount = 0;
     memset(openFile, 1, sizeof(openFile));
 
@@ -2122,6 +2108,30 @@ private:
       typeCount[pc]++;
     }
 
+    bool whiteCanWin = (typeCount[White|Pawn] ||
+                       (typeCount[White|Knight] > 1) ||
+                       (typeCount[White|Bishop] > 1) ||
+                        typeCount[White|Rook] ||
+                        typeCount[White|Queen] ||
+                       (typeCount[White|Knight] && typeCount[White|Bishop]));
+
+    bool blackCanWin = (typeCount[Black|Pawn] ||
+                       (typeCount[Black|Knight] > 1) ||
+                       (typeCount[Black|Bishop] > 1) ||
+                        typeCount[Black|Rook] ||
+                        typeCount[Black|Queen] ||
+                       (typeCount[Black|Knight] && typeCount[Black|Bishop]));
+
+    // draw?
+    if ((!whiteCanWin && !blackCanWin) ||
+        (rcount >= 100) ||
+        _seen.count(positionKey))
+    {
+      state |= Draw;
+      standPat = 0;
+      return;
+    }
+
     // evaluate pieces
     for (int i = 0; i < stackCount; ++i) {
       const senjo::Square sqr(pieceStack[i]);
@@ -2141,25 +2151,7 @@ private:
       }
     }
 
-    // draw?
-    bool whiteCanWin = (typeCount[White|Pawn] ||
-                       (typeCount[White|Knight] > 1) ||
-                       (typeCount[White|Bishop] > 1) ||
-                        typeCount[White|Rook] ||
-                        typeCount[White|Queen] ||
-                       (typeCount[White|Knight] && typeCount[White|Bishop]));
-
-    bool blackCanWin = (typeCount[Black|Pawn] ||
-                       (typeCount[Black|Knight] > 1) ||
-                       (typeCount[Black|Bishop] > 1) ||
-                        typeCount[Black|Rook] ||
-                        typeCount[Black|Queen] ||
-                       (typeCount[Black|Knight] && typeCount[Black|Bishop]));
-
-    if ((!whiteCanWin && !blackCanWin) || (rcount >= 100)) {
-      state |= Draw;
-      return (eval = 0);
-    }
+    // TODO reduce winning score if rcount is getting large
 
     // reduce winning score if "winning" side can't win
     if (eval > 0) {
@@ -2169,13 +2161,15 @@ private:
     }
     else if (eval < 0) {
       if (!blackCanWin) {
-        eval = std::max<int>(-50, (eval / 40));
+        eval = std::max<int>(-50, (eval / 4));
       }
     }
 
-    // return coarse-grain score so we don't flip flop line selection
-    // based on insignificant eval differences
-    return ((eval >> 3) << 3);
+    // round score to multiple of 8
+    eval = ((eval >> 3) << 3);
+
+    // convert to perspective of side to move
+    standPat = (ColorToMove() ? -eval : eval);
   }
 
   //--------------------------------------------------------------------------
@@ -2183,7 +2177,7 @@ private:
   //! the resulting position is applied to the given 'dest' node.
   //--------------------------------------------------------------------------
   template<Color color>
-  void ExecNullMove(ClubFoot& dest) const {
+  inline void ExecNullMove(ClubFoot& dest) const {
     assert(ColorToMove() == color);
     assert(!AttackedBy<!color>(king[color]));
     assert(&dest != this);
@@ -2203,6 +2197,7 @@ private:
     dest.positionKey = (pieceKey ^
                         _HASH[0][dest.state & FiveBits] ^
                         _HASH[0][senjo::Square::None]);
+    dest.Evaluate();
   }
 
   //--------------------------------------------------------------------------
@@ -2210,9 +2205,8 @@ private:
   //! the resulting position is applied to the given 'dest' node.
   //--------------------------------------------------------------------------
   template<Color color>
-  void Exec(const Move& move, ClubFoot& dest) const {
+  inline void Exec(const Move& move, ClubFoot& dest) const {
     assert(ColorToMove() == color);
-    assert(&dest != this);
 
     _execs++;
     _seen.insert(positionKey);
@@ -2394,6 +2388,7 @@ private:
     dest.positionKey = (dest.pieceKey ^
                         _HASH[0][dest.state & FiveBits] ^
                         _HASH[0][dest.ep.Name()]);
+    dest.Evaluate();
   }
 
   //--------------------------------------------------------------------------
@@ -2401,7 +2396,7 @@ private:
   //! \param move Must be the last move executed on this node
   //--------------------------------------------------------------------------
   template<Color color>
-  void Undo(const Move& move) const {
+  inline void Undo(const Move& move) const {
     switch (move.GetType()) {
     case Move::Invalid:
       senjo::Output() << "Cannot undo invalid move";
@@ -2495,7 +2490,7 @@ private:
     else {
       for (; !_stop && (moveIndex < moveCount); ++moveIndex) {
         senjo::Output() << moves[moveIndex].ToString() << " 1 "
-                        << moves[moveIndex].Score();
+                        << moves[moveIndex].GetScore();
         count++;
       }
     }
@@ -2525,22 +2520,19 @@ private:
       _seldepth = ply;
     }
 
-    const bool check = KingInCheck<color>();
-    const int standPat = color ? -Evaluate() : Evaluate();
+    if (IsDraw()) {
+      assert(standPat == 0);
+      return standPat;
+    }
 
     // mate distance pruning and standPat cutoff when not in check
+    const bool check = InCheck<color>();
     int best = (check ? (ply - Infinity) : standPat);
-    if ((best >= beta) || (state & Draw) || !child) {
+    if ((best >= beta) || !child) {
       return best;
     }
     if (best > alpha) {
       alpha = best;
-    }
-
-    // draw by repetition?
-    if (_seen.count(positionKey)) {
-      state |= Draw;
-      return (eval = 0);
     }
 
     // TODO delta pruning
@@ -2557,21 +2549,16 @@ private:
         if (entry->score <= alpha) {
           pv[0] = firstMove;
           pvCount = 1;
-          return alpha;
+          return entry->score;
         }
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
         pv[0] = firstMove;
         pvCount = 1;
-        if (entry->score <= alpha) {
-          return alpha;
-        }
-        if (entry->score >= beta) {
-          if (!firstMove.IsCapOrPromo()) {
-            AddKiller(firstMove);
-          }
-          return beta;
+        if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
+          IncHistory(firstMove, check, entry->depth);
+          AddKiller(firstMove);
         }
         return entry->score;
       case HashEntry::LowerBound:
@@ -2579,10 +2566,11 @@ private:
         if (entry->score >= beta) {
           pv[0] = firstMove;
           pvCount = 1;
-          if (firstMove.IsCapOrPromo()) {
+          if (!firstMove.IsCapOrPromo()) {
+            IncHistory(firstMove, check, entry->depth);
             AddKiller(firstMove);
           }
-          return beta;
+          return entry->score;
         }
         break;
       default:
@@ -2604,24 +2592,21 @@ private:
       if (_stop) {
         return beta;
       }
-      if (firstMove.Score() > best) {
+      if (firstMove.GetScore() > best) {
         UpdatePV(firstMove);
-        if (firstMove.Score() >= beta) {
+        if (firstMove.GetScore() >= beta) {
           if (!firstMove.IsCapOrPromo()) {
             AddKiller(firstMove);
           }
           if (check) {
             _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound);
           }
-          return firstMove.Score();
+          return firstMove.GetScore();
         }
-        if (firstMove.Score() > alpha) {
-          alpha = firstMove.Score();
-          if (check) {
-            _tt.Store(positionKey, firstMove, 0, HashEntry::ExactScore);
-          }
+        if (firstMove.GetScore() > alpha) {
+          alpha = firstMove.GetScore();
         }
-        best = firstMove.Score();
+        best = firstMove.GetScore();
       }
     }
 
@@ -2650,34 +2635,37 @@ private:
       if (_stop) {
         return beta;
       }
-      if (move->Score() > best) {
+      if (move->GetScore() > best) {
         UpdatePV(*move);
-        if (move->Score() >= beta) {
+        if (move->GetScore() >= beta) {
           if (!move->IsCapOrPromo()) {
             AddKiller(*move);
           }
           if (check) {
             _tt.Store(positionKey, *move, 0, HashEntry::LowerBound);
           }
-          return move->Score();
+          return move->GetScore();
         }
-        if (move->Score() > alpha) {
-          alpha = move->Score();
-          if (check) {
-            _tt.Store(positionKey, *move, 0, HashEntry::ExactScore);
-          }
+        if (move->GetScore() > alpha) {
+          alpha = move->GetScore();
         }
-        best = move->Score();
+        best = move->GetScore();
       }
     }
 
-    assert(!check || (pvCount > 0));
     assert(best <= alpha);
     assert(alpha < beta);
 
-    if (check && (alpha == orig_alpha)) {
-      assert(pv[0].Score() <= alpha);
-      _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound);
+    if (check && (pvCount > 0)) {
+      if (alpha > orig_alpha) {
+        assert(pv[0].GetScore() == alpha);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::ExactScore);
+      }
+      else {
+        assert(alpha == orig_alpha);
+        assert(pv[0].GetScore() <= alpha);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound);
+      }
     }
 
     return best;
@@ -2694,8 +2682,12 @@ private:
     assert(abs(beta) <= Infinity);
     assert(depth > 0);
 
+    if (IsDraw()) {
+      assert(standPat == 0);
+      return standPat;
+    }
+
     const bool pvNode = ((alpha + 1) < beta);
-    eval = -Infinity;
     extended = 0;
     reduced = 0;
     moveCount = 0;
@@ -2710,14 +2702,8 @@ private:
       alpha = best;
     }
 
-    // draw by repetition?
-    if (_seen.count(positionKey)) {
-      state |= Draw;
-      return (eval = 0);
-    }
-
     // extend depth if in check and previous ply not extended
-    const bool check = KingInCheck<color>();
+    const bool check = InCheck<color>();
     if (_ext && check && !parent->extended) {
       extended = 1;
       depth++;
@@ -2732,44 +2718,34 @@ private:
       case HashEntry::Stalemate: return 0;
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
-        if (!pvNode && (entry->depth >= depth)) {
-          if (entry->score <= alpha) {
-            pv[0] = firstMove;
-            pvCount = 1;
-            return alpha;
-          }
+        if ((entry->depth >= depth) && (entry->score <= alpha)) {
+          pv[0] = firstMove;
+          pvCount = 1;
+          return entry->score;
         }
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
-        if (!pvNode && (entry->depth >= depth)) {
+        if ((entry->depth >= depth) && (!pvNode || (entry->score >= beta))) {
           pv[0] = firstMove;
           pvCount = 1;
-          if (entry->score <= alpha) {
-            return alpha;
-          }
-          if (entry->score >= beta) {
-            if (firstMove.IsCapOrPromo()) {
-              IncHistory(firstMove, check, entry->depth);
-              AddKiller(firstMove);
-            }
-            return beta;
+          if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
+            IncHistory(firstMove, check, entry->depth);
+            AddKiller(firstMove);
           }
           return entry->score;
         }
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
-        if (!pvNode && (entry->depth >= depth)) {
-          if (entry->score >= beta) {
-            pv[0] = firstMove;
-            pvCount = 1;
-            if (firstMove.IsCapOrPromo()) {
-              IncHistory(firstMove, check, entry->depth);
-              AddKiller(firstMove);
-            }
-            return beta;
+        if ((entry->depth >= depth) && (entry->score >= beta)) {
+          pv[0] = firstMove;
+          pvCount = 1;
+          if (!firstMove.IsCapOrPromo()) {
+            IncHistory(firstMove, check, entry->depth);
+            AddKiller(firstMove);
           }
+          return entry->score;
         }
         break;
       default:
@@ -2778,7 +2754,7 @@ private:
     }
 
     // internal iterative deepening if no firstMove in transposition table
-    int iid = Infinity;
+    int iid = standPat;
     if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
         (depth > (pvNode ? 3 : 5)))
     {
@@ -2796,12 +2772,10 @@ private:
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
-    if (_nmp && nullMoveOk && (depth > 1) &&
-        !pvNode &&          // never do forward pruning on pvNodes
-        !check &&           // can't pass when in check
-        (pieceCount > 1) && // don't pass when stalemates are likely
-        (iid >= beta) &&    // don't pass if IID is < beta
-        ((eval >= beta) || ((color ? -Evaluate() : Evaluate()) >= beta)))
+    if (_nmp && nullMoveOk && (depth > 1) && (iid >= beta) &&
+        !pvNode &&        // never do forward pruning on pvNodes
+        !check &&         // can't pass when in check
+        (pieceCount > 1)) // don't pass when stalemates are likely
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
@@ -2815,13 +2789,12 @@ private:
       if (nmScore >= beta) {
         pvCount = 0;
         _nmCutoffs++;
-        return beta;
+        return beta; // do not return nmScore
       }
     }
     child->nullMoveOk = 1;
 
     // make sure firstMove is populated
-    const int orig_alpha = alpha;
     if (!firstMove.IsValid()) {
       GenerateMoves<color, false>(depth);
       if (moveCount <= 0) {
@@ -2836,6 +2809,7 @@ private:
     }
 
     // search first move with full alpha/beta window
+    const int orig_alpha = alpha;
     Exec<color>(firstMove, *child);
     firstMove.Score() = (depth > 1)
         ? -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode)
@@ -2844,24 +2818,20 @@ private:
     if (_stop) {
       return beta;
     }
-    if (firstMove.Score() > best) {
+    if (firstMove.GetScore() > best) {
       UpdatePV(firstMove);
-      if (firstMove.Score() >= beta) {
+      if (firstMove.GetScore() >= beta) {
         if (!firstMove.IsCapOrPromo()) {
           IncHistory(firstMove, check, depth);
           AddKiller(firstMove);
         }
         _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
-        return firstMove.Score();
+        return firstMove.GetScore();
       }
-      if (firstMove.Score() > alpha) {
-        alpha = firstMove.Score();
-        if (!firstMove.IsCapOrPromo()) {
-          IncHistory(firstMove, check, depth);
-        }
-        _tt.Store(positionKey, firstMove, depth, HashEntry::ExactScore);
+      if (firstMove.GetScore() > alpha) {
+        alpha = firstMove.GetScore();
       }
-      best = firstMove.Score();
+      best = firstMove.GetScore();
     }
     else if (!firstMove.IsCapOrPromo()) {
       DecHistory(firstMove, check);
@@ -2896,7 +2866,7 @@ private:
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
           (_hist[move->GetHistoryIndex()] < 0) &&
-          !child->KingInCheck<!color>())
+          !child->InCheck<!color>())
       {
         reduced += (1 + (cutNode || (move->GetScore() <= -120)));
         newDepth -= reduced;
@@ -2908,7 +2878,7 @@ private:
           : -child->QSearch<!color>(-(alpha + 1), -alpha, 0);
 
       // re-search at full depth?
-      if (!_stop && reduced && (move->Score() > alpha)) {
+      if (!_stop && reduced && (move->GetScore() > alpha)) {
         assert(depth > 1);
         reduced = 0;
         move->Score() =
@@ -2916,7 +2886,7 @@ private:
       }
 
       // re-search with full window?
-      if (!_stop && (move->Score() > alpha) && (move->Score() < beta)) {
+      if (!_stop && (move->GetScore() > alpha) && (move->GetScore() < beta)) {
         assert(!reduced);
         move->Score() = (depth > 1)
             ? -child->Search<!color>(-beta, -alpha, (depth - 1), false)
@@ -2927,58 +2897,47 @@ private:
       if (_stop) {
         return beta;
       }
-      if (move->Score() > best) {
+      if (move->GetScore() > best) {
         UpdatePV(*move);
         pvDepth = (depth - reduced);
-        if (move->Score() >= beta) {
+        if (move->GetScore() >= beta) {
           if (!move->IsCapOrPromo()) {
             IncHistory(*move, check, pvDepth);
             AddKiller(*move);
           }
           _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound);
-          return move->Score();
+          return move->GetScore();
         }
-        if (move->Score() > alpha) {
-          alpha = move->Score();
-          if (!move->IsCapOrPromo()) {
-            IncHistory(*move, check, pvDepth);
-          }
-          _tt.Store(positionKey, *move, pvDepth, HashEntry::ExactScore);
+        if (move->GetScore() > alpha) {
+          alpha = move->GetScore();
         }
-        best = move->Score();
+        best = move->GetScore();
       }
       else if (!move->IsCapOrPromo()) {
         DecHistory(*move, check);
       }
     }
 
-    assert(pvCount > 0);
     assert(best <= alpha);
     assert(alpha < beta);
 
-    if (alpha == orig_alpha) {
-      assert(pv[0].Score() <= alpha);
-      pvDepth = (depth - reduced);
-      _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
+    if (pvCount > 0) {
+      if (alpha > orig_alpha) {
+        assert(pv[0].GetScore() == alpha);
+        if (!pv[0].IsCapOrPromo()) {
+          IncHistory(pv[0], check, pvDepth);
+        }
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::ExactScore);
+      }
+      else {
+        assert(alpha == orig_alpha);
+        assert(pv[0].GetScore() <= alpha);
+        pvDepth = (depth - reduced);
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
+      }
     }
 
     return best;
-  }
-
-  //--------------------------------------------------------------------------
-  //! \brief Update transposition table with current move
-  //--------------------------------------------------------------------------
-  template<Color color>
-  void UpdateTT(const Move* move, const int depth, const int score) {
-    if (move && (depth > 0)) {
-      assert((depth == 1) || (move->GetScore() == score));
-      _tt.Store(positionKey, *move, depth, HashEntry::ExactScore);
-      if (child && (depth > 1)) {
-        Exec<color>(*move, *child);
-        child->UpdateTT<!color>((move + 1), (depth - 1), -score);
-        Undo<color>(*move);
-      }
-    }
   }
 
   //--------------------------------------------------------------------------
@@ -3043,14 +3002,14 @@ private:
 
     // return immediately if we only have one move
     if (moveCount == 1) {
-      OutputPV(pv[0].Score());
+      OutputPV(pv[0].GetScore());
       return pv[0].ToString();
     }
 
     Move* move;
     bool  showPV = true;
     int   alpha;
-    int   best = (color ? -Evaluate() : Evaluate());
+    int   best = standPat;
     int   beta;
     int   delta;
 
@@ -3065,40 +3024,35 @@ private:
       alpha  = std::max<int>((best - delta), -Infinity);
       beta   = std::min<int>((best + delta), +Infinity);
 
-      // prime transposition table with PV from previous iteration
-      if (d > 0) {
-        UpdateTT<color>(pv, pvCount, pv[0].Score());
-      }
-
       moveIndex = 0;
-      while ((move = GetNextMove())) {
+      while (!_stop && (move = GetNextMove())) {
         _currmove = move->ToString();
         _movenum++;
 
         // aspiration window search
         Exec<color>(*move, *child);
-        while (true) {
+        while (!_stop) {
           move->Score() = (_depth > 1)
               ? -child->Search<!color>(-beta, -alpha, (_depth - 1), false)
               : -child->QSearch<!color>(-beta, -alpha, 0);
 
           // expand aspiration window and re-search?
-          if (!_stop && ((move->Score() >= beta) ||
-                         ((move->Score() <= alpha) && (_movenum == 1))))
+          if (!_stop && ((move->GetScore() >= beta) ||
+                         ((move->GetScore() <= alpha) && (_movenum == 1))))
           {
             delta *= 4;
-            if (move->Score() >= beta) {
-              assert(move->Score() < Infinity);
-              beta = std::min<int>((move->Score() + delta), Infinity);
+            if (move->GetScore() >= beta) {
+              assert(move->GetScore() < Infinity);
+              beta = std::min<int>((move->GetScore() + delta), Infinity);
               if ((senjo::Now() - _startTime) > 1000) {
-                OutputPV(move->Score(), 1); // report lowerbound
+                OutputPV(move->GetScore(), 1); // report lowerbound
               }
             }
             else {
-              assert(move->Score() > -Infinity);
-              alpha = std::max<int>((move->Score() - delta), -Infinity);
+              assert(move->GetScore() > -Infinity);
+              alpha = std::max<int>((move->GetScore() - delta), -Infinity);
               if ((senjo::Now() - _startTime) > 1000) {
-                OutputPV(move->Score(), -1); // report upperbound
+                OutputPV(move->GetScore(), -1); // report upperbound
               }
             }
             continue;
@@ -3109,13 +3063,14 @@ private:
         Undo<color>(*move);
 
         // do we have a new principal variation?
-        if (!_stop && ((_movenum == 1) || (move->Score() > best))) {
+        if (!_stop && ((_movenum == 1) || (move->GetScore() > best))) {
           UpdatePV(*move);
-          OutputPV(move->Score());
+          OutputPV(move->GetScore());
           showPV = false;
+          _tt.Store(positionKey, *move, _depth, HashEntry::ExactScore);
 
           // set null aspiration window now that we have a principal variation
-          best = alpha = move->Score();
+          best = alpha = move->GetScore();
           beta = (alpha + 1);
 
           // scoot this move to the front of the list
@@ -3129,7 +3084,7 @@ private:
     }
 
     if (showPV) {
-      OutputPV(pv[0].Score());
+      OutputPV(pv[0].GetScore());
     }
 
     return pv[0].ToString();
