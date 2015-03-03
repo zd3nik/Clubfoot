@@ -293,6 +293,19 @@ public:
   }
 
   //--------------------------------------------------------------------------
+  //! \brief Swap the contents of this move with another move
+  //! \param other The move to swap contents with
+  //--------------------------------------------------------------------------
+  void SwapWith(Move& other) {
+    const uint32_t tbits  = bits;
+    const int32_t  tscore = score;
+    bits  = other.bits;
+    score = other.score;
+    other.bits =  tbits;
+    other.score = tscore;
+  }
+
+  //--------------------------------------------------------------------------
   //! \brief Get coordinate notation string representation of this move
   //! \return an empty string if this move is not valid
   //--------------------------------------------------------------------------

@@ -181,9 +181,12 @@ bool                ClubFoot::_lmr = false;
 bool                ClubFoot::_nmp = false;
 char                ClubFoot::_hist[0x100000] = {0};
 int                 ClubFoot::_board[128] = {0};
+int                 ClubFoot::_drawScore[2] = {0};
+int                 ClubFoot::_contempt = 0;
 int                 ClubFoot::_depth = 0;
 int                 ClubFoot::_movenum = 0;
 int                 ClubFoot::_seldepth = 0;
+int                 ClubFoot::_tempo = 0;
 std::string         ClubFoot::_currmove;
 int64_t             ClubFoot::_hashSize = 0;
 uint64_t            ClubFoot::_execs = 0;
@@ -195,11 +198,13 @@ std::set<uint64_t>  ClubFoot::_seen;
 TranspositionTable  ClubFoot::_tt;
 
 EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
+EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
 EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optTempo("Tempo Bonus", "0", EngineOption::Spin, 0, 50);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
@@ -228,11 +233,13 @@ std::list<EngineOption> ClubFoot::GetOptions() const
 {
   std::list<EngineOption> opts;
   opts.push_back(_optClearHash);
+  opts.push_back(_optContempt);
   opts.push_back(_optHash);
   opts.push_back(_optEXT);
   opts.push_back(_optIID);
   opts.push_back(_optLMR);
   opts.push_back(_optNMP);
+  opts.push_back(_optTempo);
   return opts;
 }
 
@@ -243,6 +250,12 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
   if (!stricmp(optionName.c_str(), _optClearHash.GetName().c_str())) {
     ClearHash();
     return true;
+  }
+  if (!stricmp(optionName.c_str(), _optContempt.GetName().c_str())) {
+    if (_optContempt.SetValue(optionValue)) {
+      _contempt = static_cast<int>(_optContempt.GetIntValue());
+      return true;
+    }
   }
   if (!stricmp(optionName.c_str(), _optHash.GetName().c_str())) {
     if (_optHash.SetValue(optionValue)) {
@@ -274,6 +287,12 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
+  if (!stricmp(optionName.c_str(), _optTempo.GetName().c_str())) {
+    if (_optTempo.SetValue(optionValue)) {
+      _tempo = static_cast<int>(_optTempo.GetIntValue());
+      return true;
+    }
+  }
   return false;
 }
 
@@ -289,11 +308,13 @@ void ClubFoot::Initialize()
     _node[i].parent = (i > 0) ? &(_node[i - 1]) : this;
   }
 
+  _contempt = static_cast<int>(_optContempt.GetIntValue());
+  _tempo    = static_cast<int>(_optTempo.GetIntValue());
   _hashSize = _optHash.GetIntValue();
-  _ext = (_optEXT.GetValue() == _TRUE);
-  _iid = (_optIID.GetValue() == _TRUE);
-  _lmr = (_optLMR.GetValue() == _TRUE);
-  _nmp = (_optNMP.GetValue() == _TRUE);
+  _ext      = (_optEXT.GetValue() == _TRUE);
+  _iid      = (_optIID.GetValue() == _TRUE);
+  _lmr      = (_optLMR.GetValue() == _TRUE);
+  _nmp      = (_optNMP.GetValue() == _TRUE);
 
   ClearHistory();
   SetHashSize(_hashSize);

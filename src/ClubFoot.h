@@ -96,9 +96,12 @@ private:
   static bool                _nmp;            // null move pruning
   static char                _hist[0x100000]; // move performance history
   static int                 _board[128];     // piece positions
+  static int                 _drawScore[2];   // score for getting a draw
+  static int                 _contempt;       // contempt for draw value
   static int                 _depth;          // current root search depth
   static int                 _movenum;        // current root search move number
   static int                 _seldepth;       // current selective search depth
+  static int                 _tempo;          // tempo bonus for side to move
   static std::string         _currmove;       // current root search move
   static int64_t             _hashSize;       // transposition table byte size
   static uint64_t            _execs;          // number of Exec calls
@@ -109,11 +112,13 @@ private:
   static std::set<uint64_t>  _seen;           // position keys already seen
   static TranspositionTable  _tt;             // info about visited positions
   static senjo::EngineOption _optClearHash;   // clear hash option
+  static senjo::EngineOption _optContempt;    // contempt for draw option
   static senjo::EngineOption _optHash;        // hash size option
   static senjo::EngineOption _optEXT;         // check extensions option
   static senjo::EngineOption _optIID;         // intrnl iterative deepening opt
   static senjo::EngineOption _optLMR;         // late move reductions option
   static senjo::EngineOption _optNMP;         // null move pruning option
+  static senjo::EngineOption _optTempo;       // tempo bonus option
 
   //--------------------------------------------------------------------------
   // position related variables (updated by Exec)
@@ -333,6 +338,17 @@ private:
   }
 
   //--------------------------------------------------------------------------
+  //! Scoot the move at the given index to the front of the move list
+  //! \param idx The 'moves' array index of the move to scoot
+  //--------------------------------------------------------------------------
+  inline void ScootMoveToFront(int idx) {
+    assert((idx >= 0) && (idx < moveCount));
+    while (idx-- > 0) {
+      moves[idx].SwapWith(moves[idx + 1]);
+    }
+  }
+
+  //--------------------------------------------------------------------------
   //! Get the next move from this node's 'moves' array.
   //--------------------------------------------------------------------------
   inline Move* GetNextMove() {
@@ -352,9 +368,7 @@ private:
       }
     }
     if (best_index > moveIndex) {
-      Move tmp = moves[moveIndex];
-      moves[moveIndex] = moves[best_index];
-      moves[best_index] = tmp;
+      moves[moveIndex].SwapWith(moves[best_index]);
     }
 
     return (moves + moveIndex++);
@@ -2073,7 +2087,8 @@ private:
     int pieceStack[32];
     int stackCount = 0;
     int pc;
-    int eval = (material[White] - material[Black] + (ColorToMove() ? -12 : 12));
+    int eval = (material[White] - material[Black] +
+                (ColorToMove() ? -_tempo : _tempo));
 
     pieceCount = 0;
     memset(openFile, 1, sizeof(openFile));
@@ -2125,7 +2140,7 @@ private:
     // draw due to insufficient mating material?
     if (!whiteCanWin && !blackCanWin) {
       state |= Draw;
-      standPat = 0; // TODO apply contempt factor
+      standPat = _drawScore[ColorToMove()];
       return;
     }
 
@@ -2523,7 +2538,7 @@ private:
     }
 
     if (IsDraw()) {
-      return 0; // TODO apply contempt factor
+      return _drawScore[color];
     }
 
     // mate distance pruning and standPat cutoff when not in check
@@ -2687,7 +2702,7 @@ private:
     assert(depth > 0);
 
     if (IsDraw()) {
-      return 0; // TODO apply contempt factor
+      return _drawScore[color];
     }
 
     const bool pvNode = ((alpha + 1) < beta);
@@ -2713,7 +2728,6 @@ private:
     }
 
     // do we have anything for this position in the transposition table?
-    int eval = standPat;
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
@@ -2741,7 +2755,6 @@ private:
           }
           return entry->score;
         }
-        eval = entry->score;
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
@@ -2755,7 +2768,6 @@ private:
           }
           return entry->score;
         }
-        eval = entry->score;
         break;
       default:
         assert(false);
@@ -2763,6 +2775,7 @@ private:
     }
 
     // internal iterative deepening if no firstMove in transposition table
+    int eval = standPat;
     if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
         (depth > (pvNode ? 3 : 5)))
     {
@@ -2977,30 +2990,30 @@ private:
       senjo::Output() << "No legal moves";
       return std::string();
     }
+    while (GetNextMove()) { ; } // sort 'em
 
     // move transposition table move (if any) to front of list
-    HashEntry* entry = _tt.Probe(positionKey);
-    if (entry) {
-      switch (entry->flags) {
-      case HashEntry::Checkmate:
-      case HashEntry::Stalemate:
-        assert(false);
-        break;
-      case HashEntry::UpperBound:
-      case HashEntry::ExactScore:
-      case HashEntry::LowerBound: {
-        Move ttMove(entry->moveBits, entry->score);
-        for (int i = 0; i < moveCount; ++i) {
-          if (moves[i] == ttMove) {
-            if (i > 0) {
-              moves[i] = moves[0];
-              moves[0] = ttMove;
+    if (moveCount > 1) {
+      HashEntry* entry = _tt.Probe(positionKey);
+      if (entry) {
+        switch (entry->flags) {
+        case HashEntry::Checkmate:
+        case HashEntry::Stalemate:
+          assert(false);
+          break;
+        case HashEntry::UpperBound:
+        case HashEntry::ExactScore:
+        case HashEntry::LowerBound: {
+          Move ttMove(entry->moveBits, entry->score);
+          for (int i = 0; i < moveCount; ++i) {
+            if (moves[i] == ttMove) {
+              ScootMoveToFront(i);
+              break;
             }
-            break;
           }
-        }
-        break;
-      }}
+          break;
+        }}
+      }
     }
 
     // initial principal variation
@@ -3023,7 +3036,6 @@ private:
     // iterative deepening
     for (int d = 0; !_stop && (d < depth); ++d) {
       _seldepth = _depth = (d + 1);
-      _movenum  = 0;
       child->nullMoveOk = (d > 0);
 
       showPV = true;
@@ -3031,10 +3043,10 @@ private:
       alpha  = std::max<int>((best - delta), -Infinity);
       beta   = std::min<int>((best + delta), +Infinity);
 
-      moveIndex = 0;
-      while (!_stop && (move = GetNextMove())) {
+      for (moveIndex = 0; !_stop && (moveIndex < moveCount); ++moveIndex) {
+        move      = (moves + moveIndex);
         _currmove = move->ToString();
-        _movenum++;
+        _movenum  = (moveIndex + 1);
 
         // aspiration window search
         Exec<color>(*move, *child);
@@ -3080,12 +3092,7 @@ private:
           best = alpha = move->GetScore();
           beta = (alpha + 1);
 
-          // scoot this move to the front of the list
-          for (int i = (_movenum - 1); i > 0; --i) {
-            const Move tmp = moves[i - 1];
-            moves[i - 1] = moves[i];
-            moves[i] = tmp;
-          }
+          ScootMoveToFront(moveIndex);
         }
       }
     }
@@ -3110,6 +3117,9 @@ private:
     _qnodes     = 0;
     _nullMoves  = 0;
     _nmCutoffs  = 0;
+
+    _drawScore[ColorToMove()] = -_contempt;
+    _drawScore[!ColorToMove()] = _contempt;
   }
 };
 
