@@ -455,7 +455,7 @@ private:
   //! \return True if the position at this node is a draw
   //--------------------------------------------------------------------------
   inline bool IsDraw() const {
-    return (state & Draw);
+    return ((state & Draw) || (rcount >= 100) || _seen.count(positionKey));
   }
 
   //--------------------------------------------------------------------------
@@ -2073,7 +2073,7 @@ private:
     int pieceStack[32];
     int stackCount = 0;
     int pc;
-    int eval = (material[White] - material[Black]);
+    int eval = (material[White] - material[Black] + (ColorToMove() ? -12 : 12));
 
     pieceCount = 0;
     memset(openFile, 1, sizeof(openFile));
@@ -2109,26 +2109,23 @@ private:
     }
 
     bool whiteCanWin = (typeCount[White|Pawn] ||
-                       (typeCount[White|Knight] > 1) ||
+                       (typeCount[White|Knight] > 2) ||
                        (typeCount[White|Bishop] > 1) ||
+                       (typeCount[White|Knight] && typeCount[White|Bishop]) ||
                         typeCount[White|Rook] ||
-                        typeCount[White|Queen] ||
-                       (typeCount[White|Knight] && typeCount[White|Bishop]));
+                        typeCount[White|Queen]);
 
     bool blackCanWin = (typeCount[Black|Pawn] ||
-                       (typeCount[Black|Knight] > 1) ||
+                       (typeCount[Black|Knight] > 2) ||
                        (typeCount[Black|Bishop] > 1) ||
+                       (typeCount[Black|Knight] && typeCount[Black|Bishop]) ||
                         typeCount[Black|Rook] ||
-                        typeCount[Black|Queen] ||
-                       (typeCount[Black|Knight] && typeCount[Black|Bishop]));
+                        typeCount[Black|Queen]);
 
-    // draw?
-    if ((!whiteCanWin && !blackCanWin) ||
-        (rcount >= 100) ||
-        _seen.count(positionKey))
-    {
+    // draw due to insufficient mating material?
+    if (!whiteCanWin && !blackCanWin) {
       state |= Draw;
-      standPat = 0;
+      standPat = 0; // TODO apply contempt factor
       return;
     }
 
@@ -2164,6 +2161,8 @@ private:
     }
 
     // reduce winning score if rcount is getting large
+    // NOTE: this destabilizes transposition table values
+    //       because rcount is not encoded into positionKey
     if ((rcount > 25) && (abs(eval) > 8)) {
       eval = static_cast<int>(eval * (25.0 / rcount));
     }
@@ -2524,8 +2523,7 @@ private:
     }
 
     if (IsDraw()) {
-      assert(standPat == 0);
-      return standPat;
+      return 0; // TODO apply contempt factor
     }
 
     // mate distance pruning and standPat cutoff when not in check
@@ -2549,6 +2547,7 @@ private:
       case HashEntry::Stalemate: return 0;
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
+        assert(firstMove.IsValid());
         if (entry->score <= alpha) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2557,6 +2556,7 @@ private:
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
+        assert(firstMove.IsValid());
         pv[0] = firstMove;
         pvCount = 1;
         if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
@@ -2566,6 +2566,7 @@ private:
         return entry->score;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
+        assert(firstMove.IsValid());
         if (entry->score >= beta) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2686,8 +2687,7 @@ private:
     assert(depth > 0);
 
     if (IsDraw()) {
-      assert(standPat == 0);
-      return standPat;
+      return 0; // TODO apply contempt factor
     }
 
     const bool pvNode = ((alpha + 1) < beta);
@@ -2713,6 +2713,7 @@ private:
     }
 
     // do we have anything for this position in the transposition table?
+    int eval = standPat;
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
@@ -2721,7 +2722,8 @@ private:
       case HashEntry::Stalemate: return 0;
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
-        if ((entry->depth >= depth) && (entry->score <= alpha)) {
+        assert(firstMove.IsValid());
+        if (!pvNode && (entry->depth >= depth) && (entry->score <= alpha)) {
           pv[0] = firstMove;
           pvCount = 1;
           return entry->score;
@@ -2729,7 +2731,8 @@ private:
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
-        if ((entry->depth >= depth) && (!pvNode || (entry->score >= beta))) {
+        assert(firstMove.IsValid());
+        if (!pvNode && (entry->depth >= depth)) {
           pv[0] = firstMove;
           pvCount = 1;
           if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
@@ -2738,10 +2741,12 @@ private:
           }
           return entry->score;
         }
+        eval = entry->score;
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
-        if ((entry->depth >= depth) && (entry->score >= beta)) {
+        assert(firstMove.IsValid());
+        if (!pvNode && (entry->depth >= depth) && (entry->score >= beta)) {
           pv[0] = firstMove;
           pvCount = 1;
           if (!firstMove.IsCapOrPromo()) {
@@ -2750,6 +2755,7 @@ private:
           }
           return entry->score;
         }
+        eval = entry->score;
         break;
       default:
         assert(false);
@@ -2757,17 +2763,16 @@ private:
     }
 
     // internal iterative deepening if no firstMove in transposition table
-    int iid = standPat;
     if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
         (depth > (pvNode ? 3 : 5)))
     {
       assert(!pvCount);
       const int saved = nullMoveOk;
       nullMoveOk = 0;
-      iid = Search<color>((beta - 1), beta, (depth - (pvNode ? 2 : 4)), true);
+      eval = Search<color>((beta - 1), beta, (depth - (pvNode ? 2 : 4)), true);
       nullMoveOk = saved;
       if (_stop || !pvCount) {
-        return iid;
+        return eval;
       }
       assert(pv[0].IsValid());
       firstMove = pv[0];
@@ -2775,7 +2780,7 @@ private:
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
-    if (_nmp && nullMoveOk && (depth > 1) && (iid >= beta) &&
+    if (_nmp && nullMoveOk && (depth > 1) && (eval >= beta) &&
         !pvNode &&        // never do forward pruning on pvNodes
         !check &&         // can't pass when in check
         (pieceCount > 1)) // don't pass when stalemates are likely
@@ -2935,7 +2940,6 @@ private:
       else {
         assert(alpha == orig_alpha);
         assert(pv[0].GetScore() <= alpha);
-        pvDepth = (depth - reduced);
         _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
       }
     }
