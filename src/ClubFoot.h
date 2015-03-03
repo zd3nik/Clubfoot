@@ -2151,8 +2151,6 @@ private:
       }
     }
 
-    // TODO reduce winning score if rcount is getting large
-
     // reduce winning score if "winning" side can't win
     if (eval > 0) {
       if (!whiteCanWin) {
@@ -2163,6 +2161,11 @@ private:
       if (!blackCanWin) {
         eval = std::max<int>(-50, (eval / 4));
       }
+    }
+
+    // reduce winning score if rcount is getting large
+    if ((rcount > 25) && (abs(eval) > 8)) {
+      eval = static_cast<int>(eval * (25.0 / rcount));
     }
 
     // round score to multiple of 8
