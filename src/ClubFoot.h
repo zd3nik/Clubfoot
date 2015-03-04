@@ -2559,7 +2559,7 @@ private:
     if (entry) {
       switch (entry->flags) {
       case HashEntry::Checkmate: return (ply - Infinity);
-      case HashEntry::Stalemate: return 0;
+      case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
         assert(firstMove.IsValid());
@@ -2648,12 +2648,21 @@ private:
         assert(firstMove.IsValid());
         continue;
       }
+
       Exec<color>(*move, *child);
+      if (!_stop && !check && !child->InCheck<!color>() &&
+          (move->GetScore() < 0))
+      {
+        Undo<color>(*move);
+        continue;
+      }
+
       move->Score() = -child->QSearch<!color>(-beta, -alpha, (depth - 1));
       Undo<color>(*move);
       if (_stop) {
         return beta;
       }
+
       if (move->GetScore() > best) {
         UpdatePV(*move);
         if (move->GetScore() >= beta) {
@@ -2733,7 +2742,7 @@ private:
     if (entry) {
       switch (entry->flags) {
       case HashEntry::Checkmate: return (ply - Infinity);
-      case HashEntry::Stalemate: return 0;
+      case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
         assert(firstMove.IsValid());
@@ -2796,7 +2805,7 @@ private:
     if (_nmp && nullMoveOk && (depth > 1) && (eval >= beta) &&
         !pvNode &&        // never do forward pruning on pvNodes
         !check &&         // can't pass when in check
-        (pieceCount > 1)) // don't pass when stalemates are likely
+        (pieceCount > 0)) // don't pass when stalemates are likely
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
@@ -2824,7 +2833,7 @@ private:
           return (ply - Infinity);
         }
         _tt.StoreStalemate(positionKey);
-        return 0;
+        return _drawScore[0];
       }
       firstMove = *GetNextMove();
     }
@@ -2939,6 +2948,7 @@ private:
       }
     }
 
+    assert(moveCount > 0);
     assert(best <= alpha);
     assert(alpha < beta);
 
