@@ -2612,20 +2612,21 @@ private:
         return beta;
       }
       if (firstMove.GetScore() > best) {
+        best = firstMove.GetScore();
         UpdatePV(firstMove);
         if (firstMove.GetScore() >= beta) {
           if (!firstMove.IsCapOrPromo()) {
             AddKiller(firstMove);
           }
           if (check) {
+            firstMove.Score() = beta;
             _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound);
           }
-          return firstMove.GetScore();
+          return best;
         }
         if (firstMove.GetScore() > alpha) {
           alpha = firstMove.GetScore();
         }
-        best = firstMove.GetScore();
       }
     }
 
@@ -2664,20 +2665,21 @@ private:
       }
 
       if (move->GetScore() > best) {
+        best = move->GetScore();
         UpdatePV(*move);
         if (move->GetScore() >= beta) {
           if (!move->IsCapOrPromo()) {
             AddKiller(*move);
           }
           if (check) {
+            move->Score() = beta;
             _tt.Store(positionKey, *move, 0, HashEntry::LowerBound);
           }
-          return move->GetScore();
+          return best;
         }
         if (move->GetScore() > alpha) {
           alpha = move->GetScore();
         }
-        best = move->GetScore();
       }
     }
 
@@ -2692,6 +2694,7 @@ private:
       else {
         assert(alpha == orig_alpha);
         assert(pv[0].GetScore() <= alpha);
+        pv[0].Score() = alpha;
         _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound);
       }
     }
@@ -2849,19 +2852,20 @@ private:
       return beta;
     }
     if (firstMove.GetScore() > best) {
+      best = firstMove.GetScore();
       UpdatePV(firstMove);
       if (firstMove.GetScore() >= beta) {
         if (!firstMove.IsCapOrPromo()) {
           IncHistory(firstMove, check, depth);
           AddKiller(firstMove);
         }
+        firstMove.Score() = beta;
         _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
-        return firstMove.GetScore();
+        return best;
       }
       if (firstMove.GetScore() > alpha) {
         alpha = firstMove.GetScore();
       }
-      best = firstMove.GetScore();
     }
     else if (!firstMove.IsCapOrPromo()) {
       DecHistory(firstMove, check);
@@ -2928,6 +2932,7 @@ private:
         return beta;
       }
       if (move->GetScore() > best) {
+        best = move->GetScore();
         UpdatePV(*move);
         pvDepth = (depth - reduced);
         if (move->GetScore() >= beta) {
@@ -2935,13 +2940,13 @@ private:
             IncHistory(*move, check, pvDepth);
             AddKiller(*move);
           }
+          move->Score() = beta;
           _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound);
-          return move->GetScore();
+          return best;
         }
         if (move->GetScore() > alpha) {
           alpha = move->GetScore();
         }
-        best = move->GetScore();
       }
       else if (!move->IsCapOrPromo()) {
         DecHistory(*move, check);
@@ -2963,6 +2968,7 @@ private:
       else {
         assert(alpha == orig_alpha);
         assert(pv[0].GetScore() <= alpha);
+        pv[0].Score() = alpha;
         _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
       }
     }

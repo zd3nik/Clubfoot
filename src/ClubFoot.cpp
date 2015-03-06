@@ -204,7 +204,7 @@ EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optTempo("Tempo Bonus", "0", EngineOption::Spin, 0, 50);
+EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
