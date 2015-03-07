@@ -2802,6 +2802,9 @@ private:
       assert(pv[0].IsValid());
       firstMove = pv[0];
     }
+    else if (entry && (entry->depth >= (depth - 2))) {
+      eval = entry->score;
+    }
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
