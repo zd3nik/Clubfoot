@@ -607,15 +607,15 @@ private:
     if (from.IsValid()) {
       const int piece = _board[from.Name()];
       const int cap = _board[to.Name()];
+      value = ValueOf(cap);
       if (piece < King) {
-        _board[to.Name()] = piece;
-        _board[from.Name()] = 0;
-        value = std::max<int>(0, (ValueOf(cap) - StaticExchange<!color>(to)));
-        _board[from.Name()] = piece;
-        _board[to.Name()] = cap;
-      }
-      else {
-        value = ValueOf(cap);
+        if (ValueOf(piece) >= value) {
+          _board[to.Name()] = piece;
+          _board[from.Name()] = 0;
+          value = std::max<int>(0, (value - StaticExchange<!color>(to)));
+          _board[from.Name()] = piece;
+          _board[to.Name()] = cap;
+        }
       }
     }
     return value;
