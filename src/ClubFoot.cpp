@@ -208,7 +208,6 @@ EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbo
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optTest("Experimental Feature", "1", EngineOption::Spin, 0, 9999);
 
-
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
 {

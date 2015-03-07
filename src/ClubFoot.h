@@ -2640,7 +2640,7 @@ private:
         _tt.StoreCheckmate(positionKey);
         return (ply - Infinity);
       }
-      // don't call tt.StoreStalemate()!!!
+      // don't call _tt.StoreStalemate()!!!
       return standPat;
     }
 
@@ -2653,10 +2653,11 @@ private:
       }
 
       Exec<color>(*move, *child);
-      if (!_stop && !check && !child->InCheck<!color>() &&
-          (move->GetScore() < 0))
-      {
+      if (!check && (move->GetScore() < 0) && !child->InCheck<!color>()) {
         Undo<color>(*move);
+        if (_stop) {
+          return beta;
+        }
         continue;
       }
 
@@ -2930,6 +2931,7 @@ private:
 
       // re-search with full window?
       if (!_stop && (move->GetScore() > alpha) && (move->GetScore() < beta)) {
+        assert(pvNode);
         assert(!reduced);
         move->Score() = (depth > 1)
             ? -child->Search<!color>(-beta, -alpha, (depth - 1), false)
