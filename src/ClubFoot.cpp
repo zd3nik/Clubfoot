@@ -187,6 +187,7 @@ int                 ClubFoot::_depth = 0;
 int                 ClubFoot::_movenum = 0;
 int                 ClubFoot::_seldepth = 0;
 int                 ClubFoot::_tempo = 0;
+int                 ClubFoot::_test = 0;
 std::string         ClubFoot::_currmove;
 int64_t             ClubFoot::_hashSize = 0;
 uint64_t            ClubFoot::_execs = 0;
@@ -205,6 +206,8 @@ EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOpti
 EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
+EngineOption ClubFoot::_optTest("Experimental Feature", "1", EngineOption::Spin, 0, 9999);
+
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
@@ -240,6 +243,7 @@ std::list<EngineOption> ClubFoot::GetOptions() const
   opts.push_back(_optLMR);
   opts.push_back(_optNMP);
   opts.push_back(_optTempo);
+  opts.push_back(_optTest);
   return opts;
 }
 
@@ -293,6 +297,12 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
+  if (!stricmp(optionName.c_str(), _optTest.GetName().c_str())) {
+    if (_optTest.SetValue(optionValue)) {
+      _test = static_cast<int>(_optTest.GetIntValue());
+      return true;
+    }
+  }
   return false;
 }
 
@@ -310,6 +320,7 @@ void ClubFoot::Initialize()
 
   _contempt = static_cast<int>(_optContempt.GetIntValue());
   _tempo    = static_cast<int>(_optTempo.GetIntValue());
+  _test     = static_cast<int>(_optTest.GetIntValue());
   _hashSize = _optHash.GetIntValue();
   _ext      = (_optEXT.GetValue() == _TRUE);
   _iid      = (_optIID.GetValue() == _TRUE);
@@ -846,9 +857,10 @@ std::string ClubFoot::MyGo(const int depth,
              << _tt.GetCheckmates() << " checkmates, "
              << _tt.GetStalemates() << " stalemates";
 
-    if (_nmp) {
+    if (_nmp && _nullMoves) {
       Output() << _nullMoves << " null moves, "
-               << _nmCutoffs << " cutoffs";
+               << _nmCutoffs << " cutoffs ("
+               << senjo::Percent(_nmCutoffs, _nullMoves) << "%)";
     }
   }
 

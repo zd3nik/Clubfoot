@@ -102,6 +102,7 @@ private:
   static int                 _movenum;        // current root search move number
   static int                 _seldepth;       // current selective search depth
   static int                 _tempo;          // tempo bonus for side to move
+  static int                 _test;           // new feature test value
   static std::string         _currmove;       // current root search move
   static int64_t             _hashSize;       // transposition table byte size
   static uint64_t            _execs;          // number of Exec calls
@@ -119,6 +120,7 @@ private:
   static senjo::EngineOption _optLMR;         // late move reductions option
   static senjo::EngineOption _optNMP;         // null move pruning option
   static senjo::EngineOption _optTempo;       // tempo bonus option
+  static senjo::EngineOption _optTest;        // new feature testing option
 
   //--------------------------------------------------------------------------
   // position related variables (updated by Exec)
@@ -2802,7 +2804,9 @@ private:
       assert(pv[0].IsValid());
       firstMove = pv[0];
     }
-    else if (entry && (entry->depth >= (depth - 2))) {
+    else if (_test && entry && (entry->score < eval) &&
+             (entry->depth >= (depth - 3)))
+    {
       eval = entry->score;
     }
 
@@ -2903,7 +2907,9 @@ private:
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
           (_hist[move->GetHistoryIndex()] < 0) &&
-          !child->InCheck<!color>())
+          !child->InCheck<!color>() &&
+          !((move->GetPc() == (color|Pawn)) &&
+            (move->GetTo().Y() == (color ? 1 : 6))))
       {
         reduced += (1 + (cutNode || (move->GetScore() <= -120)));
         newDepth -= reduced;
