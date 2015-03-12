@@ -74,7 +74,10 @@ public:
   //--------------------------------------------------------------------------
   //! Constructor
   //--------------------------------------------------------------------------
-  TranspositionTable() : keyMask(0), entries(NULL) { }
+  TranspositionTable()
+    : keyMask(0ULL),
+      entries(NULL)
+  { }
 
   //--------------------------------------------------------------------------
   //! Destructor
@@ -82,7 +85,7 @@ public:
   ~TranspositionTable() {
     delete[] entries;
     entries = NULL;
-    keyMask = 0;
+    keyMask = 0ULL;
   }
 
   //--------------------------------------------------------------------------
@@ -93,7 +96,7 @@ public:
   bool Resize(const size_t mbytes) {
     delete[] entries;
     entries = NULL;
-    keyMask = 0;
+    keyMask = 0ULL;
 
     if (!mbytes) {
       return true;
@@ -102,7 +105,7 @@ public:
     // convert mbytes to bytes
     const size_t bytes = (mbytes * 1024 * 1024);
 
-    // how many hash entries can we fit into the requeste number of bytes?
+    // how many hash entries can we fit into the requested number of bytes?
     const size_t count = (bytes / sizeof(HashEntry));
 
     // get high bit of 'count + 1'

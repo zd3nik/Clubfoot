@@ -2399,7 +2399,7 @@ private:
       dest.pieceKey = (pieceKey ^
           _HASH[color|King][move.GetFromName()] ^
           _HASH[color|King][move.GetToName()] ^
-          _HASH[color|Rook][color ? senjo::Square::A8 : senjo::Square::C1] ^
+          _HASH[color|Rook][color ? senjo::Square::A8 : senjo::Square::A1] ^
           _HASH[color|Rook][color ? senjo::Square::C8 : senjo::Square::C1]);
       break;
     }
@@ -2533,12 +2533,12 @@ private:
     assert(abs(beta) <= Infinity);
     assert(depth <= 0);
 
-    pvCount = 0;
     _qnodes++;
     if (ply > _seldepth) {
       _seldepth = ply;
     }
 
+    pvCount = 0;
     if (IsDraw()) {
       return _drawScore[color];
     }
@@ -2716,15 +2716,14 @@ private:
     assert(abs(beta) <= Infinity);
     assert(depth > 0);
 
+    extended  = 0;
+    reduced   = 0;
+    moveCount = 0;
+    pvCount   = 0;
+
     if (IsDraw()) {
       return _drawScore[color];
     }
-
-    const bool pvNode = ((alpha + 1) < beta);
-    extended = 0;
-    reduced = 0;
-    moveCount = 0;
-    pvCount = 0;
 
     // mate distance pruning
     int best = (ply - Infinity);
@@ -2743,8 +2742,9 @@ private:
     }
 
     // do we have anything for this position in the transposition table?
-    Move firstMove;
+    const bool pvNode = ((alpha + 1) < beta);
     HashEntry* entry = _tt.Probe(positionKey);
+    Move firstMove;
     if (entry) {
       switch (entry->flags) {
       case HashEntry::Checkmate: return (ply - Infinity);
@@ -2761,7 +2761,7 @@ private:
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
         assert(firstMove.IsValid());
-        if (!pvNode && (entry->depth >= depth)) {
+        if (entry->depth >= depth) {
           pv[0] = firstMove;
           pvCount = 1;
           if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
@@ -2805,15 +2805,11 @@ private:
       assert(pv[0].IsValid());
       firstMove = pv[0];
     }
-    else if (_test && entry && (entry->score < eval) &&
-             (entry->depth >= (depth - 3)))
-    {
-      eval = entry->score;
-    }
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
-    if (_nmp && nullMoveOk && (depth > 1) && (eval >= beta) &&
+    if (_nmp && nullMoveOk && (depth > 1) && (abs(beta) < MateScore) &&
+        (eval >= beta) && // only do NMP is static eval >= beta
         !pvNode &&        // never do forward pruning on pvNodes
         !check &&         // can't pass when in check
         (pieceCount > 0)) // don't pass when stalemates are likely
@@ -2831,6 +2827,10 @@ private:
         pvCount = 0;
         _nmCutoffs++;
         return beta; // do not return nmScore
+      }
+      if (_test && (nmScore <= -MateScore) && !extended && !parent->extended) {
+        extended = 1;
+        depth++;
       }
     }
     child->nullMoveOk = 1;
@@ -3032,6 +3032,7 @@ private:
         case HashEntry::ExactScore:
         case HashEntry::LowerBound: {
           Move ttMove(entry->moveBits, entry->score);
+          assert(ttMove.IsValid());
           for (int i = 0; i < moveCount; ++i) {
             if (moves[i] == ttMove) {
               ScootMoveToFront(i);

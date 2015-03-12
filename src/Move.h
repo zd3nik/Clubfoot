@@ -84,8 +84,10 @@ public:
   //--------------------------------------------------------------------------
   Move(const uint32_t bits = 0, const int score = 0)
     : bits(bits),
-      score(score)
-  { }
+      score(static_cast<int32_t>(score))
+  {
+    assert(abs(score) <= Infinity);
+  }
 
   //--------------------------------------------------------------------------
   //! \brief Copy constructor
@@ -128,7 +130,7 @@ public:
             const int score = 0)
   {
     assert(abs(score) <= Infinity);
-    bits = (static_cast<uint32_t>(type)                             |
+    bits = (static_cast<uint32_t>((type  & FourBits))               |
             static_cast<uint32_t>((from  & EightBits) << FromShift) |
             static_cast<uint32_t>((to    & EightBits) << ToShift)   |
             static_cast<uint32_t>((pc    & FourBits)  << PcShift)   |
@@ -142,6 +144,7 @@ public:
   //! \param other The move to copy
   //--------------------------------------------------------------------------
   Move& operator=(const Move& other) {
+    assert(abs(other.score) <= Infinity);
     bits = other.bits;
     score = other.score;
     return *this;
