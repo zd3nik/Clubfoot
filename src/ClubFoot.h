@@ -680,8 +680,16 @@ private:
 
     Move& move = moves[moveCount++];
     move.Init(mtype, fromSqr, toSqr, pc, cap, promo, score);
-    if (IsKiller(move)) {
-      move.Score() += 50;
+    if (!move.IsCapOrPromo()) {
+      if (IsKiller(move)) {
+        move.Score() += 50;
+      }
+      else {
+        score = _hist[move.GetHistoryIndex()];
+        if (score > 3) {
+          move.Score() += (score / 4);
+        }
+      }
     }
   }
 
@@ -2907,7 +2915,8 @@ private:
       if (lmr_ok &&
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
-          (_hist[move->GetHistoryIndex()] < 0) &&
+          (move->GetPc() < King) &&
+          (_hist[move->GetHistoryIndex()] < 1) &&
           !child->InCheck<!color>() &&
           !((move->GetPc() == (color|Pawn)) &&
             (move->GetTo().Y() == (color ? 1 : 6))))
