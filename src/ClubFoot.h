@@ -2661,8 +2661,7 @@ private:
       Exec<color>(*move, *child);
       if (!check &&
           ((move->GetScore() < 0) ||
-           (_test &&
-            ((standPat + move->GetScore() + 50) < alpha) &&
+           (((standPat + move->GetScore() + 50) < alpha) &&
             (move->GetPromo() != (color|Queen)) &&
             ((pieceCount > 2) ||
              (material[color] >= (QueenValue + RookValue))))) &&
@@ -2919,11 +2918,13 @@ private:
           !IsKiller(*move) &&
           (move->GetPc() < King) &&
           (_hist[move->GetHistoryIndex()] < 1) &&
-          !child->InCheck<!color>() &&
           !((move->GetPc() == (color|Pawn)) &&
-            (move->GetTo().Y() == (color ? 1 : 6))))
+            (move->GetTo().Y() == (color ? 1 : 6))) &&
+          !child->InCheck<!color>())
       {
-        reduced += (1 + (cutNode || (move->GetScore() <= -120)));
+        reduced += _test
+            ? (2 + (cutNode && ((standPat + move->GetScore() + 50) < beta)))
+            : (1 + (cutNode || (move->GetScore() <= -120)));
         newDepth -= reduced;
       }
 
@@ -3098,7 +3099,7 @@ private:
           if (!_stop && ((move->GetScore() >= beta) ||
                          ((move->GetScore() <= alpha) && (_movenum == 1))))
           {
-            delta *= 4;
+            delta *= 20;
             if (move->GetScore() >= beta) {
               assert(move->GetScore() < Infinity);
               beta = std::min<int>((move->GetScore() + delta), Infinity);
@@ -3115,7 +3116,7 @@ private:
             }
             continue;
           }
-          delta = 50;
+          delta = 25;
           break;
         }
         Undo<color>(*move);
