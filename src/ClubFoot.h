@@ -2561,8 +2561,6 @@ private:
       alpha = best;
     }
 
-    // TODO delta pruning
-
     // do we have anything for this position in the transposition table?
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
@@ -2661,7 +2659,15 @@ private:
       }
 
       Exec<color>(*move, *child);
-      if (!check && (move->GetScore() < 0) && !child->InCheck<!color>()) {
+      if (!check &&
+          ((move->GetScore() < 0) ||
+           (_test &&
+            ((standPat + move->GetScore() + 50) < alpha) &&
+            (move->GetPromo() != (color|Queen)) &&
+            ((pieceCount > 2) ||
+             (material[color] >= (QueenValue + RookValue))))) &&
+          !child->InCheck<!color>())
+      {
         Undo<color>(*move);
         if (_stop) {
           return beta;
@@ -2835,10 +2841,6 @@ private:
         pvCount = 0;
         _nmCutoffs++;
         return beta; // do not return nmScore
-      }
-      if (_test && (nmScore <= -MateScore) && !extended && !parent->extended) {
-        extended = 1;
-        depth++;
       }
     }
     child->nullMoveOk = 1;
