@@ -101,6 +101,7 @@ private:
   static int                 _depth;          // current root search depth
   static int                 _movenum;        // current root search move number
   static int                 _seldepth;       // current selective search depth
+  static int                 _rzr;            // razoring delta
   static int                 _tempo;          // tempo bonus for side to move
   static int                 _test;           // new feature test value
   static std::string         _currmove;       // current root search move
@@ -119,6 +120,7 @@ private:
   static senjo::EngineOption _optIID;         // intrnl iterative deepening opt
   static senjo::EngineOption _optLMR;         // late move reductions option
   static senjo::EngineOption _optNMP;         // null move pruning option
+  static senjo::EngineOption _optRZR;         // razoring delta option
   static senjo::EngineOption _optTempo;       // tempo bonus option
   static senjo::EngineOption _optTest;        // new feature testing option
 
@@ -2802,8 +2804,23 @@ private:
       }
     }
 
-    // internal iterative deepening if no firstMove in transposition table
+    // razoring
+    // if we're well below alpha and q-search doesn't show a saving tactic
+    // return q-search result
     int eval = standPat;
+    if (_rzr && !pvNode && !cutNode && (depth < 3) && (alpha < WinningScore) &&
+        ((standPat + _rzr) < alpha))
+    {
+      eval = QSearch<color>(alpha, beta, 0);
+      if (_stop) {
+        return beta;
+      }
+      if (eval <= alpha) {
+        return eval;
+      }
+    }
+
+    // internal iterative deepening if no firstMove in transposition table
     if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
         (depth > (pvNode ? 3 : 5)))
     {

@@ -186,6 +186,7 @@ int                 ClubFoot::_contempt = 0;
 int                 ClubFoot::_depth = 0;
 int                 ClubFoot::_movenum = 0;
 int                 ClubFoot::_seldepth = 0;
+int                 ClubFoot::_rzr = 0;
 int                 ClubFoot::_tempo = 0;
 int                 ClubFoot::_test = 0;
 std::string         ClubFoot::_currmove;
@@ -205,6 +206,7 @@ EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optRZR("Razoring Delta", "300", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optTest("Experimental Feature", "1", EngineOption::Spin, 0, 9999);
 
@@ -241,6 +243,7 @@ std::list<EngineOption> ClubFoot::GetOptions() const
   opts.push_back(_optIID);
   opts.push_back(_optLMR);
   opts.push_back(_optNMP);
+  opts.push_back(_optRZR);
   opts.push_back(_optTempo);
   opts.push_back(_optTest);
   return opts;
@@ -290,6 +293,12 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
+  if (!stricmp(optionName .c_str(), _optRZR.GetName().c_str())) {
+    if (_optRZR.SetValue(optionValue)) {
+      _rzr = static_cast<int>(_optRZR.GetIntValue());
+      return true;
+    }
+  }
   if (!stricmp(optionName.c_str(), _optTempo.GetName().c_str())) {
     if (_optTempo.SetValue(optionValue)) {
       _tempo = static_cast<int>(_optTempo.GetIntValue());
@@ -318,6 +327,7 @@ void ClubFoot::Initialize()
   }
 
   _contempt = static_cast<int>(_optContempt.GetIntValue());
+  _rzr      = static_cast<int>(_optRZR.GetIntValue());
   _tempo    = static_cast<int>(_optTempo.GetIntValue());
   _test     = static_cast<int>(_optTest.GetIntValue());
   _hashSize = _optHash.GetIntValue();
