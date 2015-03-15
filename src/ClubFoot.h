@@ -2838,25 +2838,41 @@ private:
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
-    if (_nmp && nullMoveOk && (depth > 1) && (abs(beta) < MateScore) &&
+    if (_nmp && nullMoveOk && (abs(beta) < MateScore) &&
         (eval >= beta) && // only do NMP is static eval >= beta
         !pvNode &&        // never do forward pruning on pvNodes
         !check &&         // can't pass when in check
         (pieceCount > 0)) // don't pass when stalemates are likely
     {
-      ExecNullMove<color>(*child);
-      child->nullMoveOk = 0;
-      const int rdepth = std::max<int>(0, (depth - 3));
-      int nmScore = (rdepth > 0)
-          ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
-          : -child->QSearch<!color>(-beta, (1 - beta), 0);
-      if (_stop) {
-        return beta;
+      if (depth == 1) {
+        if (_test) {
+          pvCount = 0;
+          return beta;
+        }
       }
-      if (nmScore >= beta) {
-        pvCount = 0;
-        _nmCutoffs++;
-        return beta; // do not return nmScore
+      else {
+        ExecNullMove<color>(*child);
+        child->nullMoveOk = 0;
+        int rdepth = std::max<int>(0, (depth - 3));
+        if (_test) {
+          if (_test >= 4) {
+            rdepth -= (depth / _test);
+          }
+          if ((eval - beta) >= 400) {
+            rdepth--;
+          }
+        }
+        int nmScore = (rdepth > 0)
+            ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
+            : -child->QSearch<!color>(-beta, (1 - beta), 0);
+        if (_stop) {
+          return beta;
+        }
+        if (nmScore >= beta) {
+          pvCount = 0;
+          _nmCutoffs++;
+          return beta; // do not return nmScore
+        }
       }
     }
     child->nullMoveOk = 1;
@@ -2939,9 +2955,7 @@ private:
             (move->GetTo().Y() == (color ? 1 : 6))) &&
           !child->InCheck<!color>())
       {
-        reduced += _test
-            ? (2 + (cutNode && ((standPat + move->GetScore() + 50) < beta)))
-            : (1 + (cutNode || (move->GetScore() <= -120)));
+        reduced += (2 + (cutNode && ((standPat + move->GetScore() + 50) < beta)));
         newDepth -= reduced;
       }
 
