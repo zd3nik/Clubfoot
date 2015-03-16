@@ -206,7 +206,7 @@ EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optRZR("Razoring Delta", "80", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optTest("Experimental Feature", "6", EngineOption::Spin, 0, 9999);
 
