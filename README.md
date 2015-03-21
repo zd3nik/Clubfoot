@@ -37,15 +37,6 @@ Features
 * Static exchange evaluation.
 * Transposition table.
 
-Binaries
---------
-
-I will periodically make a 64-bit binary build of Clubfoot for Windows 8 available.  Please do not ask for binaries for other platforms as I do not have the resources to provide binaries for any other platform.
-
-**NOTICE**: *This binary is provided under the terms of the license described below.  Use it at your own risk.  I welcome feedback on the performance of the engine but I provide no warranty, promises that it will work on your computer, or any form of technical support.*
-
-Here is a link to the latest build: https://www.dropbox.com/s/1vasxidlw0cihvu/Clubfoot-1.0.ead6245-win8-64.zip?dl=0
-
 License
 -------
 
