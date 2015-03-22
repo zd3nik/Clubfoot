@@ -195,6 +195,11 @@ uint64_t            ClubFoot::_execs = 0;
 uint64_t            ClubFoot::_qnodes = 0;
 uint64_t            ClubFoot::_nullMoves = 0;
 uint64_t            ClubFoot::_nmCutoffs = 0;
+uint64_t            ClubFoot::_fmExtensions = 0;
+uint64_t            ClubFoot::_fmTestNodes = 0;
+uint64_t            ClubFoot::_fmIncreases = 0;
+uint64_t            ClubFoot::_fmCutoffs = 0;
+uint64_t            ClubFoot::_fmThreats = 0;
 ClubFoot            ClubFoot::_node[MaxPlies];
 std::set<uint64_t>  ClubFoot::_seen;
 TranspositionTable  ClubFoot::_tt;
@@ -208,7 +213,7 @@ EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Chec
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optTest("Experimental Feature", "6", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optTest("Experimental Feature", "48", EngineOption::Spin, 0, 9999);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
@@ -779,7 +784,7 @@ void ClubFoot::PonderHit()
 //----------------------------------------------------------------------------
 void ClubFoot::Quit() {
   // stop searching and exit the timer thread
-  senjo::ChessEngine::Quit();
+  ChessEngine::Quit();
 
   // free up memory allocated for the transposition table
   SetHashSize(0);
@@ -866,10 +871,21 @@ std::string ClubFoot::MyGo(const int depth,
              << _tt.GetCheckmates() << " checkmates, "
              << _tt.GetStalemates() << " stalemates";
 
-    if (_nmp && _nullMoves) {
+    if (_nullMoves) {
       Output() << _nullMoves << " null moves, "
                << _nmCutoffs << " cutoffs ("
-               << senjo::Percent(_nmCutoffs, _nullMoves) << "%)";
+               << Percent(_nmCutoffs, _nullMoves) << "%)";
+    }
+
+    if (_fmExtensions) {
+      Output() << _fmExtensions << " first move extensions, "
+               << _fmTestNodes << " test nodes";
+      Output() << "  " << _fmCutoffs << " beta cutoffs ("
+               << Percent(_fmCutoffs, _fmExtensions) << "%)";
+      Output() << "  " << _fmIncreases << " alpha increases ("
+               << Percent(_fmIncreases, _fmExtensions) << "%)";
+      Output() << "  " << _fmThreats << " threat detections ("
+               << Percent(_fmThreats, _fmExtensions) << "%)";
     }
   }
 

@@ -106,10 +106,15 @@ private:
   static int                 _test;           // new feature test value
   static std::string         _currmove;       // current root search move
   static int64_t             _hashSize;       // transposition table byte size
-  static uint64_t            _execs;          // number of Exec calls
-  static uint64_t            _qnodes;         // number of QSearch calls
-  static uint64_t            _nullMoves;      // number of ExecNullMove calls
-  static uint64_t            _nmCutoffs;      // number of null moves cutoffs
+  static uint64_t            _execs;          // Exec calls
+  static uint64_t            _qnodes;         // QSearch calls
+  static uint64_t            _nullMoves;      // ExecNullMove calls
+  static uint64_t            _nmCutoffs;      // null moves cutoffs
+  static uint64_t            _fmExtensions;   // first move extensions
+  static uint64_t            _fmTestNodes;    // nodes search in fm ext tests
+  static uint64_t            _fmIncreases;    // fm exts >= alpha
+  static uint64_t            _fmCutoffs;      // fm exts >= beta
+  static uint64_t            _fmThreats;      // fm threat detections
   static ClubFoot            _node[MaxPlies]; // the node stack
   static std::set<uint64_t>  _seen;           // position keys already seen
   static TranspositionTable  _tt;             // info about visited positions
@@ -2734,7 +2739,7 @@ private:
     extended  = 0;
     reduced   = 0;
     moveCount = 0;
-    pvCount   = 0;
+    pvCount = 0;
 
     if (IsDraw()) {
       return _drawScore[color];
@@ -2758,8 +2763,9 @@ private:
 
     // do we have anything for this position in the transposition table?
     const bool pvNode = ((alpha + 1) < beta);
-    HashEntry* entry = _tt.Probe(positionKey);
+    bool extCandidate = false;
     Move firstMove;
+    HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
       switch (entry->flags) {
       case HashEntry::Checkmate: return (ply - Infinity);
@@ -2785,6 +2791,8 @@ private:
           }
           return entry->score;
         }
+        extCandidate |= ((entry->score >= beta) &&
+                         (entry->depth >= (depth - 4)));
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
@@ -2798,6 +2806,8 @@ private:
           }
           return entry->score;
         }
+        extCandidate |= ((entry->score >= beta) &&
+                         (entry->depth >= (depth - 4)));
         break;
       default:
         assert(false);
@@ -2839,22 +2849,15 @@ private:
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
     if (_nmp && nullMoveOk && (depth > 1) && (abs(beta) < MateScore) &&
-        (eval >= beta) && // only do NMP is static eval >= beta
+        (eval >= beta) && // only do NMP if static eval >= beta
         !pvNode &&        // never do forward pruning on pvNodes
         !check &&         // can't pass when in check
         (pieceCount > 0)) // don't pass when stalemates are likely
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
-      int rdepth = std::max<int>(0, (depth - 3));
-      if (_test) {
-        if (_test >= 4) {
-          rdepth -= (depth / _test);
-        }
-        if ((eval - beta) >= 400) {
-          rdepth--;
-        }
-      }
+      int rdepth = std::max<int>(0, (depth - 3 - (depth / 6) -
+                                     ((eval - beta) >= 400)));
       int nmScore = (rdepth > 0)
           ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
           : -child->QSearch<!color>(-beta, (1 - beta), 0);
@@ -2882,6 +2885,9 @@ private:
       }
       firstMove = *GetNextMove();
     }
+    else {
+      extCandidate |= (_hist[firstMove.GetHistoryIndex()] >= depth);
+    }
 
     // search first move with full alpha/beta window
     const int orig_alpha = alpha;
@@ -2893,7 +2899,7 @@ private:
     if (_stop) {
       return beta;
     }
-    if (firstMove.GetScore() > best) {
+    if (firstMove.GetScore() >= best) {
       best = firstMove.GetScore();
       UpdatePV(firstMove);
       if (firstMove.GetScore() >= beta) {
@@ -2918,15 +2924,83 @@ private:
       GenerateMoves<color, false>(depth);
       assert(moveCount > 0);
     }
-    moveIndex = 0;
+
+    // extend firstMove if it looks like it's much better than the rest
+    int pvDepth = depth;
+    Move* move;
+    if (_test && extCandidate && !extended && (depth > 4) &&
+        (pieceCount > 2) && (abs(beta) < WinningScore))
+    {
+      extended++;
+      moveIndex = 0;
+      const int rbeta = (beta - _test);
+      const uint64_t start_count = _execs;
+      while ((move = GetNextMove()) && (move->GetScore() >= 0)) {
+        if (firstMove == (*move)) {
+          assert(firstMove.IsValid());
+          continue;
+        }
+        Exec<color>(*move, *child);
+        eval = -child->Search<!color>(-rbeta, (1 - rbeta), (depth - 4), false);
+        Undo<color>(*move);
+        if (_stop) {
+          return beta;
+        }
+        if (eval >= rbeta) {
+          extended = 0;
+          break;
+        }
+      }
+      _fmTestNodes += (_execs - start_count);
+      if (extended) {
+        depth++;
+        _fmExtensions++;
+        Exec<color>(firstMove, *child);
+        firstMove.Score() =
+            -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode);
+        Undo<color>(firstMove);
+        if (_stop) {
+          return beta;
+        }
+        if (firstMove.GetScore() > best) {
+          best = firstMove.GetScore();
+          UpdatePV(firstMove);
+          pvDepth = depth;
+          if (firstMove.GetScore() >= beta) {
+            if (!firstMove.IsCapOrPromo()) {
+              IncHistory(firstMove, check, depth);
+              AddKiller(firstMove);
+            }
+            firstMove.Score() = beta;
+            _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
+            _fmCutoffs++;
+            return best;
+          }
+          if (firstMove.GetScore() > alpha) {
+            alpha = firstMove.GetScore();
+            _fmIncreases++;
+          }
+        }
+        else if (pvCount && ((firstMove.GetScore() + _test) < best)) {
+          alpha = std::max<int>(orig_alpha, firstMove.GetScore());
+          best = firstMove.GetScore();
+          UpdatePV(firstMove);
+          pvDepth = depth;
+          _fmThreats++;
+          extended++;
+          depth++;
+        }
+        extended--;
+        depth--;
+      }
+    }
 
     // is it ok to do late move reductions at this node?
     bool lmr_ok = (_lmr && !check && (depth > 2));
-    int pvDepth = depth;
     int newDepth;
 
     // search remaining moves
-    Move* move;
+    moveIndex = 0;
     while ((move = GetNextMove())) {
       if (firstMove == (*move)) {
         assert(firstMove.IsValid());
@@ -3173,13 +3247,18 @@ private:
   void InitSearch() {
     _tt.ResetCounters();
     _currmove.clear();
-    _depth      = 0;
-    _movenum    = 0;
-    _seldepth   = 0;
-    _execs      = 0;
-    _qnodes     = 0;
-    _nullMoves  = 0;
-    _nmCutoffs  = 0;
+    _depth        = 0;
+    _movenum      = 0;
+    _seldepth     = 0;
+    _execs        = 0;
+    _qnodes       = 0;
+    _nullMoves    = 0;
+    _nmCutoffs    = 0;
+    _fmExtensions = 0;
+    _fmTestNodes  = 0;
+    _fmIncreases  = 0;
+    _fmCutoffs    = 0;
+    _fmThreats    = 0;
 
     _drawScore[ColorToMove()] = -_contempt;
     _drawScore[!ColorToMove()] = _contempt;
