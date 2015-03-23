@@ -196,7 +196,7 @@ uint64_t            ClubFoot::_qnodes = 0;
 uint64_t            ClubFoot::_nullMoves = 0;
 uint64_t            ClubFoot::_nmCutoffs = 0;
 uint64_t            ClubFoot::_fmExtensions = 0;
-uint64_t            ClubFoot::_fmTestNodes = 0;
+uint64_t            ClubFoot::_fmNodes = 0;
 uint64_t            ClubFoot::_fmIncreases = 0;
 uint64_t            ClubFoot::_fmCutoffs = 0;
 uint64_t            ClubFoot::_fmThreats = 0;
@@ -213,7 +213,7 @@ EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Chec
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optTest("Experimental Feature", "48", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optTest("Experimental Feature", "5", EngineOption::Spin, 0, 9999);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
@@ -879,7 +879,7 @@ std::string ClubFoot::MyGo(const int depth,
 
     if (_fmExtensions) {
       Output() << _fmExtensions << " first move extensions, "
-               << _fmTestNodes << " test nodes";
+               << _fmNodes << " nodes";
       Output() << "  " << _fmCutoffs << " beta cutoffs ("
                << Percent(_fmCutoffs, _fmExtensions) << "%)";
       Output() << "  " << _fmIncreases << " alpha increases ("

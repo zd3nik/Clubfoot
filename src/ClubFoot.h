@@ -111,7 +111,7 @@ private:
   static uint64_t            _nullMoves;      // ExecNullMove calls
   static uint64_t            _nmCutoffs;      // null moves cutoffs
   static uint64_t            _fmExtensions;   // first move extensions
-  static uint64_t            _fmTestNodes;    // nodes search in fm ext tests
+  static uint64_t            _fmNodes;        // nodes searched in fm extensions
   static uint64_t            _fmIncreases;    // fm exts >= alpha
   static uint64_t            _fmCutoffs;      // fm exts >= beta
   static uint64_t            _fmThreats;      // fm threat detections
@@ -2235,12 +2235,172 @@ private:
   }
 
   //--------------------------------------------------------------------------
+  //! Verify the given move is valid at this node
+  //--------------------------------------------------------------------------
+  template<Color color>
+  inline int ValidateMove(const Move& move) const {
+#ifdef NDEBUG
+    int test = 0;
+#define VASSERT(x) ++test; if (!(x)) return test;
+#else
+#define VASSERT(x) if (!(x)) { \
+    PrintBoard(); \
+    senjo::Output() << move.ToString(); \
+    assert(false); \
+  }
+#endif
+
+    VASSERT(ColorToMove() == color);
+    VASSERT(move.IsValid());
+    VASSERT(move.GetFrom().IsValid());
+    VASSERT(move.GetTo().IsValid());
+
+    const int from  = move.GetFromName();
+    const int to    = move.GetToName();
+    const int pc    = _board[from];
+    const int cap   = _board[to];
+    const int promo = move.GetPromo();
+
+    VASSERT(pc);
+    VASSERT(COLOR_OF(pc) == color);
+    VASSERT((pc != (color|King)) || (from == king[color]));
+    VASSERT(pc == move.GetPc());
+    VASSERT(!cap || ((cap >= Pawn) && (cap < King)));
+    VASSERT(!cap || (COLOR_OF(cap) != color));
+    VASSERT(!promo || ((promo >= Knight) && (promo < King)));
+    VASSERT(!promo || (COLOR_OF(promo) == color));
+
+    switch (move.GetType()) {
+    case Move::Normal:
+      VASSERT(cap == move.GetCap());
+      VASSERT(!promo);
+      switch (pc) {
+      case (color|Knight):
+        switch (move.GetFrom().DirectionTo(move.GetTo())) {
+        case senjo::KnightMove1: case senjo::KnightMove2:
+        case senjo::KnightMove3: case senjo::KnightMove4:
+        case senjo::KnightMove5: case senjo::KnightMove6:
+        case senjo::KnightMove7: case senjo::KnightMove8:
+          break;
+        default:
+          VASSERT(false);
+        }
+        break;
+      case (color|Bishop):
+        switch (move.GetFrom().DirectionTo(move.GetTo())) {
+        case senjo::SouthWest: case senjo::SouthEast:
+        case senjo::NorthWest: case senjo::NorthEast:
+          break;
+        default:
+          VASSERT(false);
+        }
+        break;
+      case (color|Rook):
+        switch (move.GetFrom().DirectionTo(move.GetTo())) {
+        case senjo::South: case senjo::West:
+        case senjo::East:  case senjo::North:
+          break;
+        default:
+          VASSERT(false);
+        }
+        break;
+      case (color|Queen):
+        switch (move.GetFrom().DirectionTo(move.GetTo())) {
+        case senjo::SouthWest: case senjo::South:
+        case senjo::SouthEast: case senjo::West:
+        case senjo::East:      case senjo::NorthWest:
+        case senjo::North:     case senjo::NorthEast:
+          break;
+        default:
+          VASSERT(false);
+        }
+        break;
+      default:
+        VASSERT(false);
+      }
+      break;
+    case Move::PawnPush:
+      VASSERT(pc == (color|Pawn));
+      VASSERT(!cap);
+      VASSERT(to == (from + (color ? senjo::South : senjo::North)));
+      VASSERT(promo ? (move.GetTo().Y() == (color ? 0 : 7))
+                   : (move.GetTo().Y() != (color ? 0 : 7)));
+      break;
+    case Move::PawnLung:
+      VASSERT(pc == (color|Pawn));
+      VASSERT(!cap);
+      VASSERT(!promo);
+      VASSERT(to == (from + (2 * (color ? senjo::South : senjo::North))));
+      VASSERT(move.GetFrom().Y() == (color ? 6 : 1));
+      break;
+    case Move::PawnCapture:
+      VASSERT(pc == (color|Pawn));
+      VASSERT(cap);
+      VASSERT(cap == move.GetCap());
+      VASSERT((to == (from + (color ? senjo::SouthWest : senjo::NorthWest))) ||
+             (to == (from + (color ? senjo::SouthEast : senjo::NorthEast))));
+      VASSERT(promo ? (move.GetTo().Y() == (color ? 0 : 7))
+                   : (move.GetTo().Y() != (color ? 0 : 7)));
+      break;
+    case Move::EnPassant:
+      VASSERT(pc == (color|Pawn));
+      VASSERT(!cap);
+      VASSERT(!promo);
+      VASSERT(to == ep.Name());
+      VASSERT((to == (from + (color ? senjo::SouthWest : senjo::NorthWest))) ||
+             (to == (from + (color ? senjo::SouthEast : senjo::NorthEast))));
+      VASSERT(move.GetFrom().Y() == (color ? 3 : 4));
+      break;
+    case Move::KingMove:
+      VASSERT(pc == (color|King));
+      VASSERT(cap == move.GetCap());
+      VASSERT(!promo);
+      VASSERT(move.GetFrom().DistanceTo(move.GetTo()) == 1);
+      VASSERT(!AttackedBy<!color>(move.GetTo()));
+      break;
+    case Move::CastleShort:
+      VASSERT(pc == (color|King));
+      VASSERT(!cap);
+      VASSERT(!promo);
+      VASSERT(from == (color ? senjo::Square::E8 : senjo::Square::E1));
+      VASSERT(  to == (color ? senjo::Square::G8 : senjo::Square::G1));
+      VASSERT(!_board [color ? senjo::Square::F8 : senjo::Square::F1]);
+      VASSERT(!_board [color ? senjo::Square::G8 : senjo::Square::G1]);
+      VASSERT( _board [color ? senjo::Square::H8 : senjo::Square::H1] == (color|Rook));
+      VASSERT(!AttackedBy<!color>(move.GetFrom()));
+      VASSERT(!AttackedBy<!color>(move.GetFrom() + senjo::East));
+      VASSERT(!AttackedBy<!color>(move.GetTo()));
+      VASSERT(state & (color ? BlackShort : WhiteShort));
+      break;
+    case Move::CastleLong:
+      VASSERT(pc == (color|King));
+      VASSERT(!cap);
+      VASSERT(!promo);
+      VASSERT(from == (color ? senjo::Square::E8 : senjo::Square::E1));
+      VASSERT(  to == (color ? senjo::Square::C8 : senjo::Square::C1));
+      VASSERT( _board [color ? senjo::Square::A8 : senjo::Square::A1] == (color|Rook));
+      VASSERT(!_board [color ? senjo::Square::B8 : senjo::Square::B1]);
+      VASSERT(!_board [color ? senjo::Square::C8 : senjo::Square::C1]);
+      VASSERT(!_board [color ? senjo::Square::D8 : senjo::Square::D1]);
+      VASSERT(!AttackedBy<!color>(move.GetFrom()));
+      VASSERT(!AttackedBy<!color>(move.GetFrom() + senjo::West));
+      VASSERT(!AttackedBy<!color>(move.GetTo()));
+      VASSERT(state & (color ? BlackLong : WhiteLong));
+      break;
+    default:
+      VASSERT(false);
+    }
+    return 0;
+  }
+
+  //--------------------------------------------------------------------------
   //! Execute the given move against the position at this node,
   //! the resulting position is applied to the given 'dest' node.
   //--------------------------------------------------------------------------
   template<Color color>
   inline void Exec(const Move& move, ClubFoot& dest) const {
     assert(ColorToMove() == color);
+    assert(ValidateMove<color>(move) == 0);
 
     _execs++;
     _seen.insert(positionKey);
@@ -2415,7 +2575,7 @@ private:
           _HASH[color|King][move.GetFromName()] ^
           _HASH[color|King][move.GetToName()] ^
           _HASH[color|Rook][color ? senjo::Square::A8 : senjo::Square::A1] ^
-          _HASH[color|Rook][color ? senjo::Square::C8 : senjo::Square::C1]);
+          _HASH[color|Rook][color ? senjo::Square::D8 : senjo::Square::D1]);
       break;
     }
     dest.checkState = CheckState::Unknown;
@@ -2577,7 +2737,7 @@ private:
       case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         if (entry->score <= alpha) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2586,7 +2746,7 @@ private:
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         pv[0] = firstMove;
         pvCount = 1;
         if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
@@ -2596,7 +2756,7 @@ private:
         return entry->score;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         if (entry->score >= beta) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2772,7 +2932,7 @@ private:
       case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         if (!pvNode && (entry->depth >= depth) && (entry->score <= alpha)) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2781,7 +2941,7 @@ private:
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         if (entry->depth >= depth) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2792,11 +2952,11 @@ private:
           return entry->score;
         }
         extCandidate |= ((entry->score >= beta) &&
-                         (entry->depth >= (depth - 4)));
+                         (entry->depth >= (depth - _test)));
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
-        assert(firstMove.IsValid());
+        assert(ValidateMove<color>(firstMove) == 0);
         if (!pvNode && (entry->depth >= depth) && (entry->score >= beta)) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2807,7 +2967,7 @@ private:
           return entry->score;
         }
         extCandidate |= ((entry->score >= beta) &&
-                         (entry->depth >= (depth - 4)));
+                         (entry->depth >= (depth - _test)));
         break;
       default:
         assert(false);
@@ -2885,9 +3045,9 @@ private:
       }
       firstMove = *GetNextMove();
     }
-    else {
-      extCandidate |= (_hist[firstMove.GetHistoryIndex()] >= depth);
-    }
+//    else {
+//      extCandidate |= (_hist[firstMove.GetHistoryIndex()] >= depth);
+//    }
 
     // search first move with full alpha/beta window
     const int orig_alpha = alpha;
@@ -2928,71 +3088,56 @@ private:
     // extend firstMove if it looks like it's much better than the rest
     int pvDepth = depth;
     Move* move;
-    if (_test && extCandidate && !extended && (depth > 4) &&
-        (pieceCount > 2) && (abs(beta) < WinningScore))
+    if (_test && extCandidate && !extended && !parent->extended &&
+        (pieceCount > 2))
     {
+      depth++;
       extended++;
-      moveIndex = 0;
-      const int rbeta = (beta - _test);
+      _fmExtensions++;
       const uint64_t start_count = _execs;
-      while ((move = GetNextMove()) && (move->GetScore() >= 0)) {
-        if (firstMove == (*move)) {
-          assert(firstMove.IsValid());
-          continue;
-        }
-        Exec<color>(*move, *child);
-        eval = -child->Search<!color>(-rbeta, (1 - rbeta), (depth - 4), false);
-        Undo<color>(*move);
-        if (_stop) {
-          return beta;
-        }
-        if (eval >= rbeta) {
-          extended = 0;
-          break;
-        }
-      }
-      _fmTestNodes += (_execs - start_count);
-      if (extended) {
-        depth++;
-        _fmExtensions++;
-        Exec<color>(firstMove, *child);
+      Exec<color>(firstMove, *child);
+      firstMove.Score() =
+          -child->Search<!color>(-(alpha + 1), -alpha, (depth - 1), !cutNode);
+      if (!_stop && pvNode && (firstMove.GetScore() > alpha)) {
+        assert(beta > (alpha + 1));
         firstMove.Score() =
             -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode);
-        Undo<color>(firstMove);
-        if (_stop) {
-          return beta;
-        }
-        if (firstMove.GetScore() > best) {
-          best = firstMove.GetScore();
-          UpdatePV(firstMove);
-          pvDepth = depth;
-          if (firstMove.GetScore() >= beta) {
-            if (!firstMove.IsCapOrPromo()) {
-              IncHistory(firstMove, check, depth);
-              AddKiller(firstMove);
-            }
-            firstMove.Score() = beta;
-            _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
-            _fmCutoffs++;
-            return best;
-          }
-          if (firstMove.GetScore() > alpha) {
-            alpha = firstMove.GetScore();
-            _fmIncreases++;
-          }
-        }
-        else if (pvCount && ((firstMove.GetScore() + _test) < best)) {
-          alpha = std::max<int>(orig_alpha, firstMove.GetScore());
-          best = firstMove.GetScore();
-          UpdatePV(firstMove);
-          pvDepth = depth;
-          _fmThreats++;
-          extended++;
-          depth++;
-        }
-        extended--;
-        depth--;
       }
+      Undo<color>(firstMove);
+      _fmNodes += (_execs - start_count);
+      if (_stop) {
+        return beta;
+      }
+      if (firstMove.GetScore() > best) {
+        best = firstMove.GetScore();
+        UpdatePV(firstMove);
+        pvDepth = depth;
+        if (firstMove.GetScore() >= beta) {
+          if (!firstMove.IsCapOrPromo()) {
+            IncHistory(firstMove, check, depth);
+            AddKiller(firstMove);
+          }
+          firstMove.Score() = beta;
+          _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
+          _fmCutoffs++;
+          return best;
+        }
+        if (firstMove.GetScore() > alpha) {
+          alpha = firstMove.GetScore();
+          _fmIncreases++;
+        }
+      }
+      else if (pvCount && ((firstMove.GetScore() + 48) < best)) {
+        alpha = std::max<int>(orig_alpha, firstMove.GetScore());
+        best = firstMove.GetScore();
+        UpdatePV(firstMove);
+        pvDepth = depth;
+        _fmThreats++;
+        extended++;
+        depth++;
+      }
+      extended--;
+      depth--;
     }
 
     // is it ok to do late move reductions at this node?
@@ -3140,8 +3285,8 @@ private:
         case HashEntry::UpperBound:
         case HashEntry::ExactScore:
         case HashEntry::LowerBound: {
-          Move ttMove(entry->moveBits, entry->score);
-          assert(ttMove.IsValid());
+          const Move ttMove(entry->moveBits, entry->score);
+          assert(ValidateMove<color>(ttMove) == 0);
           for (int i = 0; i < moveCount; ++i) {
             if (moves[i] == ttMove) {
               ScootMoveToFront(i);
@@ -3255,7 +3400,7 @@ private:
     _nullMoves    = 0;
     _nmCutoffs    = 0;
     _fmExtensions = 0;
-    _fmTestNodes  = 0;
+    _fmNodes      = 0;
     _fmIncreases  = 0;
     _fmCutoffs    = 0;
     _fmThreats    = 0;
