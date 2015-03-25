@@ -213,7 +213,7 @@ EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Chec
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optTest("Experimental Feature", "5", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optTest("Experimental Feature", "0", EngineOption::Spin, 0, 9999);
 
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
