@@ -209,7 +209,7 @@ private:
   //! Set the size of the transposition table - this clears the table data
   //--------------------------------------------------------------------------
   void SetHashSize(const int64_t mbytes) {
-    if (!_tt.Resize(mbytes)) {
+    if (!_tt.Resize(static_cast<size_t>(mbytes))) {
       senjo::Output() << "cannot allocate hash table of " << mbytes << " MB";
     }
   }
