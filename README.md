@@ -40,9 +40,9 @@ Features
 Binary Downloads
 ----------------
 
-I will periodically make binary builds of this engine available.  Please do not ask for binaries for other platforms as I do not have the resources to provide binaries for other platforms.
+I will periodically make binary builds of this engine available.  Please do not ask for binaries for platforms other than those provided as I do not have the resources to provide binaries for other platforms.
 
-**NOTICE**: *This binary is provided under the terms of the license described below.  Use it at your own risk.  I welcome feedback on the performance of the engine but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
+**NOTICE**: *These binaries are provided under the terms of the license described below.  Use them at your own risk.  I welcome feedback on the performance of Clubfoot but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
 
 * [Clubfoot-1.0.cdc2b53.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjQi16SDB0OHhtSm8&authuser=0)
 * md5sums:
@@ -50,6 +50,14 @@ I will periodically make binary builds of this engine available.  Please do not 
   * `1e4abbfc5a79f8df85c50e374c66b861` Clubfoot-1.0.cdc2b53.zip
   * `7fa1fbba627d2f6d20f277fe9a80806a` Clubfoot-1.0.cdc2b53-win32.exe
   * `35d4037985664f5e9a171d0f5005ec55` Clubfoot-1.0.cdc2b53-win64.exe
+  * `875326af033c5ba0d1fb42ad5946b08d` Clubfoot-Logo.png
+
+* [Clubfoot-1.0.0d03228-linux-libc-2.20.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjQi16SDB0OHhtSm8&authuser=0)
+* md5sums:
+ 
+  * `f52641c7e77d34d8a2a7e746e95ed545` Clubfoot-1.0.0d03228-linux-libc-2.20.zip
+  * `66a23300105fadd42d17c9c0aba1f304` Clubfoot-1.0.0d03228-linux32
+  * `01a2f0885b8eeb0cbd506084e87fb67f` Clubfoot-1.0.0d03228-linux64
   * `875326af033c5ba0d1fb42ad5946b08d` Clubfoot-Logo.png
 
 License
