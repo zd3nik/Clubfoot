@@ -44,13 +44,14 @@ I will periodically make binary builds of this engine available.  Please do not 
 
 **NOTICE**: *These binaries are provided under the terms of the license described below.  Use them at your own risk.  I welcome feedback on the performance of Clubfoot but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
 
-* [Clubfoot-1.0.cdc2b53.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjQi16SDB0OHhtSm8&authuser=0)
+* [Clubfoot-1.0.31eadf2-windows-msvc2012.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjd3o0Rkx2dXRsM0k&authuser=0)
 * md5sums:
  
-  * `1e4abbfc5a79f8df85c50e374c66b861` Clubfoot-1.0.cdc2b53.zip
-  * `7fa1fbba627d2f6d20f277fe9a80806a` Clubfoot-1.0.cdc2b53-win32.exe
-  * `35d4037985664f5e9a171d0f5005ec55` Clubfoot-1.0.cdc2b53-win64.exe
+  * `7f5ab0ee570c532b2abdc3e0e54bf944` Clubfoot-1.0.31eadf2-windows-msvc2012.zip
+  * `be1d1334d3c24c14054c3027ab3cfc9b` Clubfoot-1.0.31eadf2-win32.exe
+  * `823b30c84fc39be6343f71bc42075455` Clubfoot-1.0.31eadf2-win64.exe
   * `875326af033c5ba0d1fb42ad5946b08d` Clubfoot-Logo.png
+
 
 * [Clubfoot-1.0.0d03228-linux-libc-2.20.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjNEZMU3VnanJQTU0&authuser=0)
 * md5sums:
