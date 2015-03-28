@@ -2731,7 +2731,7 @@ private:
       if (_stop) {
         return beta;
       }
-      if (firstMove.GetScore() > best) {
+      if (firstMove.GetScore() >= best) {
         best = firstMove.GetScore();
         UpdatePV(firstMove);
         if (firstMove.GetScore() >= beta) {
@@ -2844,7 +2844,7 @@ private:
     extended  = 0;
     reduced   = 0;
     moveCount = 0;
-    pvCount = 0;
+    pvCount   = 0;
 
     if (IsDraw()) {
       return _drawScore[color];
@@ -2923,7 +2923,7 @@ private:
     // if we're well below alpha and q-search doesn't show a saving tactic
     // return q-search result
     int eval = standPat;
-    if (_rzr && !pvNode && !cutNode && (depth == 2) && (alpha < WinningScore) &&
+    if (_rzr && !pvNode && (depth == 2) && (alpha < WinningScore) &&
         ((standPat + _rzr) < alpha))
     {
       eval = QSearch<color>(alpha, beta, 0);
@@ -2963,16 +2963,16 @@ private:
       child->nullMoveOk = 0;
       int rdepth = std::max<int>(0, (depth - 3 - (depth / 6) -
                                      ((eval - beta) >= 400)));
-      int nmScore = (rdepth > 0)
+      eval = (rdepth > 0)
           ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
           : -child->QSearch<!color>(-beta, (1 - beta), 0);
       if (_stop) {
         return beta;
       }
-      if (nmScore >= beta) {
+      if (eval >= beta) {
         pvCount = 0;
         _nmCutoffs++;
-        return beta; // do not return nmScore
+        return beta; // do not return eval
       }
     }
     child->nullMoveOk = 1;
@@ -2990,9 +2990,6 @@ private:
       }
       firstMove = *GetNextMove();
     }
-//    else {
-//      extCandidate |= (_hist[firstMove.GetHistoryIndex()] >= depth);
-//    }
 
     // search first move with full alpha/beta window
     const int orig_alpha = alpha;
@@ -3030,64 +3027,10 @@ private:
       assert(moveCount > 0);
     }
 
-    // extend firstMove if it looks like it's much better than the rest
-    int pvDepth = depth;
-    Move* move;
-    if (_test && extCandidate && !extended && !parent->extended &&
-        (pieceCount > 2))
-    {
-      depth++;
-      extended++;
-      _fmExtensions++;
-      const uint64_t start_count = _execs;
-      Exec<color>(firstMove, *child);
-      firstMove.Score() =
-          -child->Search<!color>(-(alpha + 1), -alpha, (depth - 1), !cutNode);
-      if (!_stop && pvNode && (firstMove.GetScore() > alpha)) {
-        assert(beta > (alpha + 1));
-        firstMove.Score() =
-            -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode);
-      }
-      Undo<color>(firstMove);
-      _fmNodes += (_execs - start_count);
-      if (_stop) {
-        return beta;
-      }
-      if (firstMove.GetScore() > best) {
-        best = firstMove.GetScore();
-        UpdatePV(firstMove);
-        pvDepth = depth;
-        if (firstMove.GetScore() >= beta) {
-          if (!firstMove.IsCapOrPromo()) {
-            IncHistory(firstMove, check, depth);
-            AddKiller(firstMove);
-          }
-          firstMove.Score() = beta;
-          _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
-          _fmCutoffs++;
-          return best;
-        }
-        if (firstMove.GetScore() > alpha) {
-          alpha = firstMove.GetScore();
-          _fmIncreases++;
-        }
-      }
-      else if (pvCount && ((firstMove.GetScore() + 48) < best)) {
-        alpha = std::max<int>(orig_alpha, firstMove.GetScore());
-        best = firstMove.GetScore();
-        UpdatePV(firstMove);
-        pvDepth = depth;
-        _fmThreats++;
-        extended++;
-        depth++;
-      }
-      extended--;
-      depth--;
-    }
-
-    // is it ok to do late move reductions at this node?
     bool lmr_ok = (_lmr && !check && (depth > 2));
+    int pvDepth = depth;
     int newDepth;
+    Move* move;
 
     // search remaining moves
     moveIndex = 0;
@@ -3129,8 +3072,7 @@ private:
       }
 
       // re-search with full window?
-      if (!_stop && (move->GetScore() > alpha) && (move->GetScore() < beta)) {
-        assert(pvNode);
+      if (!_stop && pvNode && (move->GetScore() > alpha)) {
         assert(!reduced);
         move->Score() = (depth > 1)
             ? -child->Search<!color>(-beta, -alpha, (depth - 1), false)
