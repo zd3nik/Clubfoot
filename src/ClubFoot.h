@@ -1905,8 +1905,8 @@ private:
   inline int QueenEval(const senjo::Square& sqr) {
     int score = SquareValue((color|Queen), sqr.Name());
 
-    // the queen is almost an entirely tactical piece.  There are some positional
-    // rules of thumb that could be applied tor the queen, but we'll just leave
+    // the queen is almost an entirely tactical piece. There are some positional
+    // rules of thumb that could be applied for the queen, but we'll just leave
     // it up to the piece square table
 
     return score;
@@ -1919,8 +1919,10 @@ private:
   inline int KingEval(const senjo::Square& sqr) {
     assert(sqr == king[color]);
     senjo::Square tmp;
+    senjo::Square t2;
+    const int y = sqr.Y();
     int score = SquareValue((color|King), sqr.Name());
-    int val;
+    int val = 0;
 
     // penalty for being in front of own pieces
     for (tmp = (sqr + (color ? senjo::North : senjo::South)); tmp.IsValid();
@@ -1944,152 +1946,91 @@ private:
     }
 
     // penalty for open files on side of the board where the king is
-    val = 0;
+    // bonus for pawn shield
+    // penalty for pawn storm
     switch (sqr.X()) {
     case 0: case 1: case 2:
-      val += (openFile[!color][0] + openFile[!color][1] + openFile[!color][2] +
-              openFile[ color][0] + openFile[ color][1] + openFile[ color][2]);
+      val += (8 * (openFile[!color][0] + openFile[!color][1] +
+                   openFile[!color][2] +
+                   openFile[ color][0] + openFile[ color][1] +
+                   openFile[ color][2]));
+      for (tmp = senjo::Square(0, (y + (color ? senjo::South : senjo::North)));
+           tmp.IsValid() && (tmp.X() < 3); ++tmp)
+      {
+        switch (_board[tmp.Name()]) {
+          case (color|Pawn):    val += 10; break;
+          case ((!color)|Pawn): val -= 10; break;
+        }
+        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
+          switch (_board[t2.Name()]) {
+            case (color|Pawn):    val += 5; break;
+            case ((!color)|Pawn): val -= 8; break;
+          }
+          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
+            switch (_board[t2.Name()]) {
+              case ((!color)|Pawn): val -= 6; break;
+            }
+          }
+        }
+      }
       break;
     case 3: case 4:
-      val += (openFile[!color][2] + openFile[!color][3] +
-              openFile[!color][4] + openFile[!color][5] +
-              openFile[ color][2] + openFile[ color][3] +
-              openFile[ color][4] + openFile[ color][5]);
+      val += (8 * (openFile[!color][2] + openFile[!color][3] +
+                   openFile[!color][4] + openFile[!color][5] +
+                   openFile[ color][2] + openFile[ color][3] +
+                   openFile[ color][4] + openFile[ color][5]));
+      for (tmp = senjo::Square(2, (y + (color ? senjo::South : senjo::North)));
+           tmp.IsValid() && (tmp.X() < 6); ++tmp)
+      {
+        switch (_board[tmp.Name()]) {
+          case (color|Pawn):    val += 10; break;
+          case ((!color)|Pawn): val -= 10; break;
+        }
+        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
+          switch (_board[t2.Name()]) {
+            case (color|Pawn):    val += 5; break;
+            case ((!color)|Pawn): val -= 8; break;
+          }
+          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
+            switch (_board[t2.Name()]) {
+              case ((!color)|Pawn): val -= 6; break;
+            }
+          }
+        }
+      }
       break;
     case 5: case 6: case 7:
-      val += (openFile[!color][5] + openFile[!color][6] + openFile[!color][7] +
-              openFile[ color][5] + openFile[ color][6] + openFile[ color][7]);
+      val += (8 * (openFile[!color][5] + openFile[!color][6] +
+                   openFile[!color][7] +
+                   openFile[ color][5] + openFile[ color][6] +
+                   openFile[ color][7]));
+      for (tmp = senjo::Square(5, (y + (color ? senjo::South : senjo::North)));
+           tmp.IsValid() && (tmp.X() < 8); ++tmp)
+      {
+        switch (_board[tmp.Name()]) {
+          case (color|Pawn):    val += 10; break;
+          case ((!color)|Pawn): val -= 10; break;
+        }
+        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
+          switch (_board[t2.Name()]) {
+            case (color|Pawn):    val += 5; break;
+            case ((!color)|Pawn): val -= 8; break;
+          }
+          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
+            switch (_board[t2.Name()]) {
+              case ((!color)|Pawn): val -= 6; break;
+            }
+          }
+        }
+      }
       break;
     default:
       assert(false);
     }
     if (val) {
-      score -= static_cast<int>(MidGame(color) * 4 * val);
+      score -= static_cast<int>(MidGame(color) * val);
     }
 
-    if (!(state & (color ? BlackCastleMask : WhiteCastleMask))) {
-      // bonus for pawn shield, penalty for pawn storm
-      val = 0;
-      switch (sqr.Name()) {
-      case (color ? senjo::Square::A8 : senjo::Square::A1):
-      case (color ? senjo::Square::B8 : senjo::Square::B1):
-      case (color ? senjo::Square::C8 : senjo::Square::C1):
-        switch (_board[color ? senjo::Square::A7 : senjo::Square::A2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::B7 : senjo::Square::B2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::C7 : senjo::Square::C2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::A6 : senjo::Square::A3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::B6 : senjo::Square::B3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::C6 : senjo::Square::C3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        break;
-      case (color ? senjo::Square::A7 : senjo::Square::A2):
-      case (color ? senjo::Square::B7 : senjo::Square::B2):
-      case (color ? senjo::Square::C7 : senjo::Square::C2):
-        switch (_board[color ? senjo::Square::A6 : senjo::Square::A3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::B6 : senjo::Square::B3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::C6 : senjo::Square::C3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::A5 : senjo::Square::A4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::B5 : senjo::Square::B4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::C5 : senjo::Square::C4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        break;
-      case (color ? senjo::Square::F8 : senjo::Square::F1):
-      case (color ? senjo::Square::G8 : senjo::Square::G1):
-      case (color ? senjo::Square::H8 : senjo::Square::H1):
-        switch (_board[color ? senjo::Square::F7 : senjo::Square::F2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::G7 : senjo::Square::G2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::H7 : senjo::Square::H2]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::F6 : senjo::Square::F3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::G6 : senjo::Square::G3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::H6 : senjo::Square::H3]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        break;
-      case (color ? senjo::Square::F7 : senjo::Square::F2):
-      case (color ? senjo::Square::G7 : senjo::Square::G2):
-      case (color ? senjo::Square::H7 : senjo::Square::H2):
-        switch (_board[color ? senjo::Square::F6 : senjo::Square::F3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::G6 : senjo::Square::G3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::H6 : senjo::Square::H3]) {
-          case (color|Pawn):    val += 8; break;
-          case ((!color)|Pawn): val -= 8; break;
-        }
-        switch (_board[color ? senjo::Square::F5 : senjo::Square::F4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::G5 : senjo::Square::G4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        switch (_board[color ? senjo::Square::H5 : senjo::Square::H4]) {
-          case (color|Pawn):    val += 4; break;
-          case ((!color)|Pawn): val -= 4; break;
-        }
-        break;
-      default:
-        break;
-      }
-      if (val) {
-        score += static_cast<int>(MidGame(color) * val);
-      }
-    }
     return score;
   }
 
