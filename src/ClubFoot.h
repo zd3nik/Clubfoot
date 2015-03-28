@@ -1718,7 +1718,8 @@ private:
     }
 
     // penalty if doubled
-    for (tmp = (sqr + (color ? senjo::South : senjo::North)); tmp.IsValid();
+    for (tmp = (sqr + (color ? senjo::South : senjo::North));
+         passed && tmp.IsValid(); // passed var simply used to break the loop
          tmp += (color ? senjo::South : senjo::North))
     {
       if (_board[tmp.Name()] == (color|Pawn)) {
@@ -1763,7 +1764,7 @@ private:
                           (sqr.DistanceTo(right) < 2));
       const int opFlanks = (leftOp.IsValid() + rightOp.IsValid());
 
-      // if friendly flank pawns outweigh opposing flank pawns we have a passer
+      // if friendly flank pawns >= opposing flank pawns we have a passer
       const int diff = (flanks - opFlanks);
       if (diff >= 0) {
         // remember pawn/square table also gives points for advancement
@@ -1790,6 +1791,9 @@ private:
         }
 
         score += bonus;
+      }
+      else {
+        passed = false; // not a passer nor a potential passer
       }
     }
 
