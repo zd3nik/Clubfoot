@@ -177,13 +177,13 @@ const int ClubFoot::_PIECE_SQR[12][128] = {
 bool                ClubFoot::_initialized = false;
 bool                ClubFoot::_ext = false;
 bool                ClubFoot::_iid = false;
-bool                ClubFoot::_lmr = false;
 bool                ClubFoot::_nmp = false;
 char                ClubFoot::_hist[0x100000] = {0};
 int                 ClubFoot::_board[128] = {0};
 int                 ClubFoot::_drawScore[2] = {0};
 int                 ClubFoot::_contempt = 0;
 int                 ClubFoot::_depth = 0;
+int                 ClubFoot::_lmr = 0;
 int                 ClubFoot::_movenum = 0;
 int                 ClubFoot::_seldepth = 0;
 int                 ClubFoot::_rzr = 0;
@@ -195,11 +195,8 @@ uint64_t            ClubFoot::_execs = 0;
 uint64_t            ClubFoot::_qnodes = 0;
 uint64_t            ClubFoot::_nullMoves = 0;
 uint64_t            ClubFoot::_nmCutoffs = 0;
-uint64_t            ClubFoot::_fmExtensions = 0;
-uint64_t            ClubFoot::_fmNodes = 0;
-uint64_t            ClubFoot::_fmIncreases = 0;
-uint64_t            ClubFoot::_fmCutoffs = 0;
-uint64_t            ClubFoot::_fmThreats = 0;
+uint64_t            ClubFoot::_lmReductions = 0;
+uint64_t            ClubFoot::_lmResearches = 0;
 ClubFoot            ClubFoot::_node[MaxPlies];
 std::set<uint64_t>  ClubFoot::_seen;
 TranspositionTable  ClubFoot::_tt;
@@ -209,7 +206,7 @@ EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
 EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optLMR("Late Move Reduction", "2", EngineOption::Spin, 0, 3);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
@@ -288,7 +285,7 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
   }
   if (!stricmp(optionName.c_str(), _optLMR.GetName().c_str())) {
     if (_optLMR.SetValue(optionValue)) {
-      _lmr = (_optLMR.GetValue() == _TRUE);
+      _lmr = static_cast<int>(_optLMR.GetIntValue());
       return true;
     }
   }
@@ -332,13 +329,13 @@ void ClubFoot::Initialize()
   }
 
   _contempt = static_cast<int>(_optContempt.GetIntValue());
+  _lmr      = static_cast<int>(_optLMR.GetIntValue());
   _rzr      = static_cast<int>(_optRZR.GetIntValue());
   _tempo    = static_cast<int>(_optTempo.GetIntValue());
   _test     = static_cast<int>(_optTest.GetIntValue());
   _hashSize = _optHash.GetIntValue();
   _ext      = (_optEXT.GetValue() == _TRUE);
   _iid      = (_optIID.GetValue() == _TRUE);
-  _lmr      = (_optLMR.GetValue() == _TRUE);
   _nmp      = (_optNMP.GetValue() == _TRUE);
 
   ClearHistory();
@@ -877,15 +874,10 @@ std::string ClubFoot::MyGo(const int depth,
                << Percent(_nmCutoffs, _nullMoves) << "%)";
     }
 
-    if (_fmExtensions) {
-      Output() << _fmExtensions << " first move extensions, "
-               << _fmNodes << " nodes";
-      Output() << "  " << _fmCutoffs << " beta cutoffs ("
-               << Percent(_fmCutoffs, _fmExtensions) << "%)";
-      Output() << "  " << _fmIncreases << " alpha increases ("
-               << Percent(_fmIncreases, _fmExtensions) << "%)";
-      Output() << "  " << _fmThreats << " threat detections ("
-               << Percent(_fmThreats, _fmExtensions) << "%)";
+    if (_lmReductions) {
+      Output() << _lmReductions << " late move reductions";
+      Output() << "  " << _lmResearches << " re-searched at full depth ("
+               << Percent(_lmResearches, _lmReductions) << "%)";
     }
   }
 

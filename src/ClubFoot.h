@@ -92,13 +92,13 @@ private:
   static bool                _initialized;    // is the engine initialized?
   static bool                _ext;            // check extensions
   static bool                _iid;            // internal iterative deepening
-  static bool                _lmr;            // late move reductions
   static bool                _nmp;            // null move pruning
   static char                _hist[0x100000]; // move performance history
   static int                 _board[128];     // piece positions
   static int                 _drawScore[2];   // score for getting a draw
   static int                 _contempt;       // contempt for draw value
   static int                 _depth;          // current root search depth
+  static int                 _lmr;            // late move reduction
   static int                 _movenum;        // current root search move number
   static int                 _seldepth;       // current selective search depth
   static int                 _rzr;            // razoring delta
@@ -110,11 +110,8 @@ private:
   static uint64_t            _qnodes;         // QSearch calls
   static uint64_t            _nullMoves;      // ExecNullMove calls
   static uint64_t            _nmCutoffs;      // null moves cutoffs
-  static uint64_t            _fmExtensions;   // first move extensions
-  static uint64_t            _fmNodes;        // nodes searched in fm extensions
-  static uint64_t            _fmIncreases;    // fm exts >= alpha
-  static uint64_t            _fmCutoffs;      // fm exts >= beta
-  static uint64_t            _fmThreats;      // fm threat detections
+  static uint64_t            _lmReductions;   // number of late move reductions
+  static uint64_t            _lmResearches;   // lms re-searched at full depth
   static ClubFoot            _node[MaxPlies]; // the node stack
   static std::set<uint64_t>  _seen;           // position keys already seen
   static TranspositionTable  _tt;             // info about visited positions
@@ -151,7 +148,7 @@ private:
   int       extended;        // plies the search at this node was extended
   int       reduced;         // plies the search at this node was reduced
   int       nullMoveOk;      // ok to try null move at this node?
-  int       moveCount;       // number of moves in this nodes 'moves' array
+  int       moveCount;       // number of moves in this node's 'moves' array
   int       moveIndex;       // which move in 'moves' array this node is on
   int       pvCount;         // move count in this node's principal variation
   char      openFile[2][8];  // files with no pawns (per color)
@@ -1679,7 +1676,8 @@ private:
     senjo::Square tmp;
     bool passed = true; // set to false below if not passed
     int score = SquareValue((color|Pawn), sqr.Name());
-    int x = sqr.X();
+    const int x = sqr.X();
+    const int y = sqr.Y();
 
     openFile[color][x] = 0;
 
@@ -1737,7 +1735,7 @@ private:
     if (passed) {
       senjo::Square leftOp;
       senjo::Square rightOp;
-      if (sqr.Y() != (color ? 1 : 6)) {
+      if (y != (color ? 1 : 6)) {
         // find opposing pawn on left flank
         for (tmp = (sqr + (color ? senjo::SouthWest : senjo::NorthWest));
              tmp.IsValid(); tmp += (color ? senjo::North : senjo::South))
@@ -1769,17 +1767,17 @@ private:
       if (diff >= 0) {
         // remember pawn/square table also gives points for advancement
         static const int PASSER[6] = { 16, 24, 36, 52, 68, 80 };
-        int bonus = PASSER[color ? (6 - sqr.Y()) : (sqr.Y() - 1)];
-
-        // increase bonus if it has extra support
-        if (diff > 0) {
-          bonus += (bonus / 2);
-        }
+        int bonus = PASSER[color ? (6 - y) : (y - 1)];
 
         // reduce bonus if only potentially passed
         if (opFlanks) {
           bonus /= 2;
           passed = false; // allow backward pawn penalty
+        }
+
+        // increase bonus if completely pased and has support
+        else if (diff > 0) {
+          bonus += (bonus / 2);
         }
 
         // reduce bonus if blocked
@@ -2772,12 +2770,9 @@ private:
 
       Exec<color>(*move, *child);
       if (!check &&
+          (move->GetPromo() != (color|Queen)) &&
           ((move->GetScore() < 0) ||
-           (((standPat + move->GetScore() + 50) < alpha) &&
-            (move->GetPromo() != (color|Queen)) &&
-            ((pieceCount > 2) ||
-             (material[color] >= (QueenValue + RookValue))))) &&
-          !child->InCheck<!color>())
+           ((standPat + move->GetScore() + PawnValue) < alpha)))
       {
         Undo<color>(*move);
         if (_stop) {
@@ -2862,13 +2857,12 @@ private:
     // extend depth if in check and previous ply not extended
     const bool check = InCheck<color>();
     if (_ext && check && !parent->extended) {
-      extended = 1;
+      extended++;
       depth++;
     }
 
     // do we have anything for this position in the transposition table?
     const bool pvNode = ((alpha + 1) < beta);
-    bool extCandidate = false;
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
@@ -2896,8 +2890,6 @@ private:
           }
           return entry->score;
         }
-        extCandidate |= ((entry->score >= beta) &&
-                         (entry->depth >= (depth - _test)));
         break;
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
@@ -2911,8 +2903,6 @@ private:
           }
           return entry->score;
         }
-        extCandidate |= ((entry->score >= beta) &&
-                         (entry->depth >= (depth - _test)));
         break;
       default:
         assert(false);
@@ -2994,17 +2984,17 @@ private:
     // search first move with full alpha/beta window
     const int orig_alpha = alpha;
     Exec<color>(firstMove, *child);
-    firstMove.Score() = (depth > 1)
+    eval = (depth > 1)
         ? -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode)
         : -child->QSearch<!color>(-beta, -alpha, 0);
     Undo<color>(firstMove);
     if (_stop) {
       return beta;
     }
-    if (firstMove.GetScore() >= best) {
-      best = firstMove.GetScore();
+    if (eval >= best) {
+      best = eval;
       UpdatePV(firstMove);
-      if (firstMove.GetScore() >= beta) {
+      if (eval >= beta) {
         if (!firstMove.IsCapOrPromo()) {
           IncHistory(firstMove, check, depth);
           AddKiller(firstMove);
@@ -3013,8 +3003,8 @@ private:
         _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
         return best;
       }
-      if (firstMove.GetScore() > alpha) {
-        alpha = firstMove.GetScore();
+      if (eval > alpha) {
+        alpha = eval;
       }
     }
     else if (!firstMove.IsCapOrPromo()) {
@@ -3027,7 +3017,7 @@ private:
       assert(moveCount > 0);
     }
 
-    bool lmr_ok = (_lmr && !check && (depth > 2));
+    bool lmr_ok = (_lmr && !check && (depth > (_lmr + 1)));
     int pvDepth = depth;
     int newDepth;
     Move* move;
@@ -3041,40 +3031,41 @@ private:
       }
 
       Exec<color>(*move, *child);
-      newDepth = (depth - 1);
-      reduced = 0;
 
       // late move reductions
       if (lmr_ok &&
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
-          (move->GetPc() < King) &&
           (_hist[move->GetHistoryIndex()] < 1) &&
           !((move->GetPc() == (color|Pawn)) &&
             (move->GetTo().Y() == (color ? 1 : 6))) &&
           !child->InCheck<!color>())
       {
-        reduced += (2 + (cutNode && ((standPat + move->GetScore() + 50) < beta)));
-        newDepth -= reduced;
+        _lmReductions++;
+        reduced = _lmr;
+      }
+      else {
+        reduced = 0;
       }
 
       // first search with a null window to quickly see if it improves alpha
-      move->Score() = (newDepth > 0)
+      newDepth = (depth - 1 - reduced);
+      eval = (newDepth > 0)
           ? -child->Search<!color>(-(alpha + 1), -alpha, newDepth, true)
           : -child->QSearch<!color>(-(alpha + 1), -alpha, 0);
 
       // re-search at full depth?
-      if (!_stop && reduced && (move->GetScore() > alpha)) {
+      if (!_stop && reduced && (eval > alpha)) {
         assert(depth > 1);
+        _lmResearches++;
         reduced = 0;
-        move->Score() =
-            -child->Search<!color>(-(alpha + 1), -alpha, (depth - 1), true);
+        eval = -child->Search<!color>(-(alpha + 1), -alpha, (depth - 1), false);
       }
 
       // re-search with full window?
-      if (!_stop && pvNode && (move->GetScore() > alpha)) {
+      if (!_stop && pvNode && (eval > alpha)) {
         assert(!reduced);
-        move->Score() = (depth > 1)
+        eval = (depth > 1)
             ? -child->Search<!color>(-beta, -alpha, (depth - 1), false)
             : -child->QSearch<!color>(-beta, -alpha, 0);
       }
@@ -3083,11 +3074,11 @@ private:
       if (_stop) {
         return beta;
       }
-      if (move->GetScore() > best) {
-        best = move->GetScore();
+      if (eval > best) {
+        best = eval;
         UpdatePV(*move);
         pvDepth = (depth - reduced);
-        if (move->GetScore() >= beta) {
+        if (eval >= beta) {
           if (!move->IsCapOrPromo()) {
             IncHistory(*move, check, pvDepth);
             AddKiller(*move);
@@ -3096,8 +3087,8 @@ private:
           _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound);
           return best;
         }
-        if (move->GetScore() > alpha) {
-          alpha = move->GetScore();
+        if (eval > alpha) {
+          alpha = eval;
         }
       }
       else if (!move->IsCapOrPromo()) {
@@ -3110,8 +3101,8 @@ private:
     assert(alpha < beta);
 
     if (pvCount > 0) {
+      pv[0].Score() = alpha;
       if (alpha > orig_alpha) {
-        assert(pv[0].GetScore() == alpha);
         if (!pv[0].IsCapOrPromo()) {
           IncHistory(pv[0], check, pvDepth);
         }
@@ -3119,8 +3110,6 @@ private:
       }
       else {
         assert(alpha == orig_alpha);
-        assert(pv[0].GetScore() <= alpha);
-        pv[0].Score() = alpha;
         _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
       }
     }
@@ -3286,11 +3275,8 @@ private:
     _qnodes       = 0;
     _nullMoves    = 0;
     _nmCutoffs    = 0;
-    _fmExtensions = 0;
-    _fmNodes      = 0;
-    _fmIncreases  = 0;
-    _fmCutoffs    = 0;
-    _fmThreats    = 0;
+    _lmReductions = 0;
+    _lmResearches = 0;
 
     _drawScore[ColorToMove()] = -_contempt;
     _drawScore[!ColorToMove()] = _contempt;
