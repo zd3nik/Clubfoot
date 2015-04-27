@@ -2675,7 +2675,7 @@ private:
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
-      switch (entry->flags) {
+      switch (entry->GetPrimaryFlag()) {
       case HashEntry::Checkmate: return (ply - Infinity);
       case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
@@ -2738,7 +2738,7 @@ private:
           }
           if (check) {
             firstMove.Score() = beta;
-            _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound);
+            _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound, false);
           }
           return best;
         }
@@ -2796,7 +2796,7 @@ private:
           }
           if (check) {
             move->Score() = beta;
-            _tt.Store(positionKey, *move, 0, HashEntry::LowerBound);
+            _tt.Store(positionKey, *move, 0, HashEntry::LowerBound, false);
           }
           return best;
         }
@@ -2812,13 +2812,13 @@ private:
     if (check && (pvCount > 0)) {
       if (alpha > orig_alpha) {
         assert(pv[0].GetScore() == alpha);
-        _tt.Store(positionKey, pv[0], 0, HashEntry::ExactScore);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::ExactScore, false);
       }
       else {
         assert(alpha == orig_alpha);
         assert(pv[0].GetScore() <= alpha);
         pv[0].Score() = alpha;
-        _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound, false);
       }
     }
 
@@ -2856,7 +2856,7 @@ private:
 
     // extend depth if in check and previous ply not extended
     const bool check = InCheck<color>();
-    if (_ext && check && !parent->extended) {
+    if (_ext && check && (parent->reduced || !parent->extended)) {
       extended++;
       depth++;
     }
@@ -2866,7 +2866,7 @@ private:
     Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
     if (entry) {
-      switch (entry->flags) {
+      switch (entry->GetPrimaryFlag()) {
       case HashEntry::Checkmate: return (ply - Infinity);
       case HashEntry::Stalemate: return _drawScore[color];
       case HashEntry::UpperBound:
@@ -2906,6 +2906,12 @@ private:
         break;
       default:
         assert(false);
+      }
+      if (_test && entry->HasExtendedFlag() &&
+          !extended && (parent->reduced || !parent->extended))
+      {
+        extended++;
+        depth++;
       }
     }
 
@@ -2979,6 +2985,10 @@ private:
         return _drawScore[0];
       }
       firstMove = *GetNextMove();
+      if (_test && (moveCount == 1) && !extended) {
+        extended++;
+        depth++;
+      }
     }
 
     // search first move with full alpha/beta window
@@ -3000,7 +3010,7 @@ private:
           AddKiller(firstMove);
         }
         firstMove.Score() = beta;
-        _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound);
+        _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound, extended);
         return best;
       }
       if (eval > alpha) {
@@ -3015,6 +3025,10 @@ private:
     if (moveCount <= 0) {
       GenerateMoves<color, false>(depth);
       assert(moveCount > 0);
+      if (_test && (moveCount == 1) && !extended) {
+        extended++;
+        depth++;
+      }
     }
 
     bool lmr_ok = (_lmr && !check && (depth > (_lmr + 1)));
@@ -3084,7 +3098,7 @@ private:
             AddKiller(*move);
           }
           move->Score() = beta;
-          _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound);
+          _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound, extended);
           return best;
         }
         if (eval > alpha) {
@@ -3106,11 +3120,11 @@ private:
         if (!pv[0].IsCapOrPromo()) {
           IncHistory(pv[0], check, pvDepth);
         }
-        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::ExactScore);
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::ExactScore, extended);
       }
       else {
         assert(alpha == orig_alpha);
-        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound);
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound, extended);
       }
     }
 
@@ -3153,7 +3167,7 @@ private:
     if (moveCount > 1) {
       HashEntry* entry = _tt.Probe(positionKey);
       if (entry) {
-        switch (entry->flags) {
+        switch (entry->GetPrimaryFlag()) {
         case HashEntry::Checkmate:
         case HashEntry::Stalemate:
           assert(false);
@@ -3244,7 +3258,7 @@ private:
           UpdatePV(*move);
           OutputPV(move->GetScore());
           showPV = false;
-          _tt.Store(positionKey, *move, _depth, HashEntry::ExactScore);
+          _tt.Store(positionKey, *move, _depth, HashEntry::ExactScore, false);
 
           // set null aspiration window now that we have a principal variation
           best = alpha = move->GetScore();

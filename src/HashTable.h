@@ -45,12 +45,31 @@ struct HashEntry
 {
 public:
   enum Flag {
+    // primary flags
     Checkmate   = 0x01,
     Stalemate   = 0x02,
-    UpperBound  = 0x04,
-    ExactScore  = 0x08,
-    LowerBound  = 0x10
+    UpperBound  = 0x03,
+    ExactScore  = 0x04,
+    LowerBound  = 0x05,
+    PrimaryMask = 0x07,
+
+    // other flags
+    Extended    = 0x08
   };
+
+  //--------------------------------------------------------------------------
+  //! \return The primary flag assigned to this entry
+  //--------------------------------------------------------------------------
+  int GetPrimaryFlag() const {
+    return (flags & HashEntry::PrimaryMask);
+  }
+
+  //--------------------------------------------------------------------------
+  //! \return true if the Extended flag is set on this entry
+  //--------------------------------------------------------------------------
+  bool HasExtendedFlag() const {
+    return (flags & HashEntry::Extended);
+  }
 
   uint64_t positionKey;
   uint32_t moveBits;
@@ -172,19 +191,21 @@ public:
   //! \param key The position key
   //! \param bestmove The best move for the given position key
   //! \param depth The search depth used to obtain bestmove
-  //! \param flag The HashEntry::Flag to assign to this entry
+  //! \param primaryFlag The primary HashEntry::Flag to assign to this entry
+  //! \param extended Was the search on this move extended?
   //--------------------------------------------------------------------------
   void Store(const uint64_t key,
              const Move& bestmove,
              const int depth,
-             const int flag)
+             const int primaryFlag,
+             const int extended)
   {
     assert(bestmove.IsValid());
     assert(abs(bestmove.GetScore()) < Infinity);
     assert((depth >= 0) && (depth < 256));
-    assert((flag == HashEntry::LowerBound) ||
-           (flag == HashEntry::UpperBound) ||
-           (flag == HashEntry::ExactScore));
+    assert((primaryFlag == HashEntry::LowerBound) ||
+           (primaryFlag == HashEntry::UpperBound) ||
+           (primaryFlag == HashEntry::ExactScore));
 
     if (key && entries) {
       _stores++;
@@ -193,7 +214,8 @@ public:
       entry->moveBits    = bestmove.GetBits();
       entry->score       = static_cast<int16_t>(bestmove.GetScore());
       entry->depth       = static_cast<uint8_t>(depth);
-      entry->flags       = static_cast<uint8_t>(flag);
+      entry->flags       = static_cast<uint8_t>(
+            primaryFlag | (extended ? HashEntry::Extended : 0));
     }
   }
 
