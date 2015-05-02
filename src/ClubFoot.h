@@ -2856,7 +2856,7 @@ private:
 
     // extend depth if in check and previous ply not extended
     const bool check = InCheck<color>();
-    if (_ext && check && (parent->reduced || !parent->extended)) {
+    if (_ext && check && !parent->extended) {
       extended++;
       depth++;
     }
@@ -2907,9 +2907,7 @@ private:
       default:
         assert(false);
       }
-      if (_test && entry->HasExtendedFlag() &&
-          !extended && (parent->reduced || !parent->extended))
-      {
+      if (_test && entry->HasExtendedFlag() && !extended && !parent->extended) {
         extended++;
         depth++;
       }
