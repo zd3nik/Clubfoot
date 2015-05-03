@@ -47,10 +47,10 @@ enum PieceType {
 
 enum PieceValue {
   PawnValue   = 100,
-  KnightValue = 350,
-  BishopValue = 350,
+  KnightValue = 314,
+  BishopValue = 314,
   RookValue   = 500,
-  QueenValue  = 950
+  QueenValue  = 975
 };
 
 enum CastleType {

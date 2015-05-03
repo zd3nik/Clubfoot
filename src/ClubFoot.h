@@ -1777,14 +1777,14 @@ private:
 
         // increase bonus if completely pased and has support
         else if (diff > 0) {
-          bonus += (bonus / 2);
+          bonus += (bonus / 3);
         }
 
         // reduce bonus if blocked
-        if ((tmp = sqr + (color ? senjo::South : senjo::North)).IsValid() &&
+        if ((tmp = (sqr + (color ? senjo::South : senjo::North))).IsValid() &&
             _board[tmp.Name()])
         {
-          bonus /= 2;
+          bonus -= (bonus /= 4);
           passed = false; // allow backward pawn penalty
         }
 
@@ -1825,8 +1825,8 @@ private:
 
     // keep the knight close to the action
     // assuming the action is centered around the kings
-    score += (8 - (sqr.DistanceTo(king[White]) + sqr.DistanceTo(king[Black])));
-
+    score += (2 * (8 - (sqr.DistanceTo(king[White]) +
+                        sqr.DistanceTo(king[Black]))));
     return score;
   }
 
@@ -1838,7 +1838,8 @@ private:
     int score = SquareValue((color|Bishop), sqr.Name());
 
     // stay close to fiendly king during endgame
-    score += static_cast<int>(EndGame(color) * (8 - sqr.DistanceTo(king[color])));
+    score += static_cast<int>(EndGame(color) *
+                              (2 * (8 - sqr.DistanceTo(king[color]))));
 
     // bonus for being inline with enemy king
     switch (sqr.DirectionTo(king[!color])) {
@@ -1861,7 +1862,8 @@ private:
     int score = SquareValue((color|Rook), sqr.Name());
 
     // stay close to fiendly king during endgame
-    score += static_cast<int>(EndGame(color) * (8 - sqr.DistanceTo(king[color])));
+    score += static_cast<int>(EndGame(color) *
+                              (2 * (8 - sqr.DistanceTo(king[color]))));
 
     // bonus for being on an open or half-open file
     const int x = sqr.X();
@@ -2066,6 +2068,7 @@ private:
       case (Black|Rook):
       case (White|Queen):
       case (Black|Queen):
+        typeCount[COLOR_OF(pc)]++;
         pieceStack[stackCount++] = sqr.Name();
         if (COLOR_OF(pc) == ColorToMove()) {
           pieceCount++;
@@ -2102,6 +2105,75 @@ private:
       state |= Draw;
       standPat = _drawScore[ColorToMove()];
       return;
+    }
+
+    // no pawns is bad
+    if (!typeCount[White|Pawn]) {
+      eval -= 50;
+    }
+    if (!typeCount[Black|Pawn]) {
+      eval += 50;
+    }
+
+    // decrease value of loner minor pieces
+    if (typeCount[Black|Pawn] && (typeCount[White] == 1) &&
+        (typeCount[White|Knight] || typeCount[White|Bishop]))
+    {
+      eval -= 50;
+    }
+    if (typeCount[White|Pawn] && (typeCount[Black] == 1) &&
+        (typeCount[Black|Knight] || typeCount[Black|Bishop]))
+    {
+      eval += 50;
+    }
+
+    // total count of pawns on the board - inflated a little bit
+    pc = ((4 * (typeCount[White|Pawn] + typeCount[Black|Pawn])) / 3);
+
+    // increase 1 knight and 1 bishop relative to number of pawns on the board
+    // to discourage sacrificing a minor for 3 pawns in the opening
+    if (typeCount[White|Knight]) {
+      eval += pc;
+    }
+    if (typeCount[White|Bishop]) {
+      eval += pc;
+    }
+    if (typeCount[Black|Knight]) {
+      eval -= pc;
+    }
+    if (typeCount[Black|Bishop]) {
+      eval -= pc;
+    }
+
+    // increase 1 rook as pawns come off the board
+    if (typeCount[White|Rook]) {
+      eval += (22 - pc);
+    }
+    if (typeCount[Black|Rook]) {
+      eval += (22 - pc);
+    }
+
+    // bishop pair more valuable as pawns come off the board
+    // NOTE: this doesn't verify the bishops are on opposite color squares!
+    if (typeCount[White|Bishop] >= 2) {
+      eval += (48 - pc);
+    }
+    if (typeCount[Black|Bishop] >= 2) {
+      eval -= (48 - pc);
+    }
+
+    // redundant knights/rooks are worth slightly less
+    if (typeCount[White|Knight] > 1) {
+      eval -= (16 * (typeCount[White|Knight] - 1));
+    }
+    if (typeCount[Black|Knight] > 1) {
+      eval += (16 * (typeCount[Black|Knight] - 1));
+    }
+    if (typeCount[White|Knight] > 1) {
+      eval -= (20 * (typeCount[White|Knight] - 1));
+    }
+    if (typeCount[Black|Knight] > 1) {
+      eval += (20 * (typeCount[Black|Knight] - 1));
     }
 
     // evaluate pieces
