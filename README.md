@@ -48,22 +48,22 @@ I will periodically make binary builds of this engine available.  Please do not 
 
 **NOTICE**: *These binaries are provided under the terms of the license described below.  Use them at your own risk.  I welcome feedback on the performance of Clubfoot but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
 
-* [Clubfoot-1.0.31eadf2-windows-msvc2012.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjd3o0Rkx2dXRsM0k&authuser=0)
+* [Clubfoot-1.0.0fa7e53-windows-msvc2012.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjc0oyTE95MlBhSlU&authuser=0)
 * md5sums:
  
-  * `7f5ab0ee570c532b2abdc3e0e54bf944` Clubfoot-1.0.31eadf2-windows-msvc2012.zip
-  * `be1d1334d3c24c14054c3027ab3cfc9b` Clubfoot-1.0.31eadf2-win32.exe
-  * `823b30c84fc39be6343f71bc42075455` Clubfoot-1.0.31eadf2-win64.exe
-  * `875326af033c5ba0d1fb42ad5946b08d` Clubfoot-Logo.png
+  * `d9260e00ae2375f6095d61e9455be0e9` Clubfoot-1.0.0fa7e53-windows-msvc2012.zip
+  * `59d60ceaf467a06ff6be52adaf3f110a` Clubfoot-1.0.0fa7e53-win32.exe
+  * `99e84d8a44cf043f9145ee9676559075` Clubfoot-1.0.0fa7e53-win64.exe
+  * `b612c7e5b65b78c5cebf4c1acc419bf5` Clubfoot-Logo-Small.png
 
 
-* [Clubfoot-1.0.0d03228-linux-libc-2.20.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjNEZMU3VnanJQTU0&authuser=0)
+* [Clubfoot-1.0.0fa7e53-linux-libc-2.20.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjRC1tY2JxbnhzVms&authuser=0)
 * md5sums:
  
-  * `f52641c7e77d34d8a2a7e746e95ed545` Clubfoot-1.0.0d03228-linux-libc-2.20.zip
-  * `66a23300105fadd42d17c9c0aba1f304` Clubfoot-1.0.0d03228-linux32
-  * `01a2f0885b8eeb0cbd506084e87fb67f` Clubfoot-1.0.0d03228-linux64
-  * `875326af033c5ba0d1fb42ad5946b08d` Clubfoot-Logo.png
+  * `416902a729da33b774e3fca1198c9038` Clubfoot-1.0.0fa7e53-linux-libc-2.20.zip
+  * `5a13e7fc02d2297953635889fb49e5ed` Clubfoot-1.0.0fa7e53-linux32
+  * `57b629c8b6b7a10230bfe2fa4aa1ef89` Clubfoot-1.0.0fa7e53-linux64
+  * `b612c7e5b65b78c5cebf4c1acc419bf5` Clubfoot-Logo-Small.png
 
 License
 -------
