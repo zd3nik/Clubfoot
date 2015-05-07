@@ -2150,7 +2150,7 @@ private:
       eval += (22 - pc);
     }
     if (typeCount[Black|Rook]) {
-      eval += (22 - pc);
+      eval -= (22 - pc);
     }
 
     // bishop pair more valuable as pawns come off the board
@@ -2169,11 +2169,11 @@ private:
     if (typeCount[Black|Knight] > 1) {
       eval += (16 * (typeCount[Black|Knight] - 1));
     }
-    if (typeCount[White|Knight] > 1) {
-      eval -= (20 * (typeCount[White|Knight] - 1));
+    if (typeCount[White|Rook] > 1) {
+      eval -= (20 * (typeCount[White|Rook] - 1));
     }
-    if (typeCount[Black|Knight] > 1) {
-      eval += (20 * (typeCount[Black|Knight] - 1));
+    if (typeCount[Black|Rook] > 1) {
+      eval += (20 * (typeCount[Black|Rook] - 1));
     }
 
     // evaluate pieces
