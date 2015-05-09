@@ -749,7 +749,7 @@ void ClubFoot::PrintBoard() const
       break;
 
     case 0:
-      out << "  Static Evaluation : " << standPat;
+      out << "  Static Evaluation : " << (ColorToMove() ? -standPat : standPat);
       break;
     }
     out << '\n';
