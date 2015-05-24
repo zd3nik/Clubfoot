@@ -174,42 +174,50 @@ const int ClubFoot::_PIECE_SQR[12][128] = {
 //----------------------------------------------------------------------------
 // static ClubFoot class variables
 //----------------------------------------------------------------------------
-bool                ClubFoot::_initialized = false;
 bool                ClubFoot::_ext = false;
 bool                ClubFoot::_iid = false;
+bool                ClubFoot::_initialized = false;
 bool                ClubFoot::_nmp = false;
 char                ClubFoot::_hist[0x100000] = {0};
 int                 ClubFoot::_board[128] = {0};
-int                 ClubFoot::_drawScore[2] = {0};
 int                 ClubFoot::_contempt = 0;
+int                 ClubFoot::_delta = 0;
 int                 ClubFoot::_depth = 0;
+int                 ClubFoot::_drawScore[2] = {0};
 int                 ClubFoot::_lmr = 0;
 int                 ClubFoot::_movenum = 0;
-int                 ClubFoot::_seldepth = 0;
 int                 ClubFoot::_rzr = 0;
+int                 ClubFoot::_seldepth = 0;
 int                 ClubFoot::_tempo = 0;
 int                 ClubFoot::_test = 0;
 std::string         ClubFoot::_currmove;
 int64_t             ClubFoot::_hashSize = 0;
+uint64_t            ClubFoot::_chkExts = 0;
+uint64_t            ClubFoot::_deltaCount = 0;
 uint64_t            ClubFoot::_execs = 0;
-uint64_t            ClubFoot::_qnodes = 0;
-uint64_t            ClubFoot::_nullMoves = 0;
-uint64_t            ClubFoot::_nmCutoffs = 0;
+uint64_t            ClubFoot::_hashExts = 0;
 uint64_t            ClubFoot::_lmReductions = 0;
 uint64_t            ClubFoot::_lmResearches = 0;
+uint64_t            ClubFoot::_nmCutoffs = 0;
+uint64_t            ClubFoot::_nullMoves = 0;
+uint64_t            ClubFoot::_oneReplyExts = 0;
+uint64_t            ClubFoot::_qnodes = 0;
+uint64_t            ClubFoot::_rzrCount = 0;
+uint64_t            ClubFoot::_rzrCutoffs = 0;
 ClubFoot            ClubFoot::_node[MaxPlies];
 std::set<uint64_t>  ClubFoot::_seen;
 TranspositionTable  ClubFoot::_tt;
 
+EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
 EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
 EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
+EngineOption ClubFoot::_optDelta("Delta Pruning Margin", "100", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optLMR("Late Move Reduction", "2", EngineOption::Spin, 0, 3);
+EngineOption ClubFoot::_optLMR("Late Move Reduction", "1", EngineOption::Spin, 0, 3);
 EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optRZR("Razoring Delta", "0", EngineOption::Spin, 0, 9999);
-EngineOption ClubFoot::_optTempo("Tempo Bonus", "12", EngineOption::Spin, 0, 50);
+EngineOption ClubFoot::_optRZR("Razoring Delta", "500", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optTempo("Tempo Bonus", "0", EngineOption::Spin, 0, 50);
 EngineOption ClubFoot::_optTest("Experimental Feature", "0", EngineOption::Spin, 0, 9999);
 
 //----------------------------------------------------------------------------
@@ -238,9 +246,10 @@ std::string ClubFoot::GetAuthorName() const
 std::list<EngineOption> ClubFoot::GetOptions() const
 {
   std::list<EngineOption> opts;
+  opts.push_back(_optHash);
   opts.push_back(_optClearHash);
   opts.push_back(_optContempt);
-  opts.push_back(_optHash);
+  opts.push_back(_optDelta);
   opts.push_back(_optEXT);
   opts.push_back(_optIID);
   opts.push_back(_optLMR);
@@ -255,6 +264,12 @@ std::list<EngineOption> ClubFoot::GetOptions() const
 bool ClubFoot::SetEngineOption(const std::string& optionName,
                                const std::string& optionValue)
 {
+  if (!stricmp(optionName.c_str(), _optHash.GetName().c_str())) {
+    if (_optHash.SetValue(optionValue)) {
+      SetHashSize(_optHash.GetIntValue());
+      return true;
+    }
+  }
   if (!stricmp(optionName.c_str(), _optClearHash.GetName().c_str())) {
     ClearHash();
     return true;
@@ -265,15 +280,15 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
-  if (!stricmp(optionName.c_str(), _optHash.GetName().c_str())) {
-    if (_optHash.SetValue(optionValue)) {
-      SetHashSize(_optHash.GetIntValue());
-      return true;
-    }
-  }
   if (!stricmp(optionName.c_str(), _optEXT.GetName().c_str())) {
     if (_optEXT.SetValue(optionValue)) {
       _ext = (_optEXT.GetValue() == _TRUE);
+      return true;
+    }
+  }
+  if (!stricmp(optionName.c_str(), _optDelta.GetName().c_str())) {
+    if (_optDelta.SetValue(optionValue)) {
+      _delta = static_cast<int>(_optDelta.GetIntValue());
       return true;
     }
   }
@@ -295,7 +310,7 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
-  if (!stricmp(optionName .c_str(), _optRZR.GetName().c_str())) {
+  if (!stricmp(optionName.c_str(), _optRZR.GetName().c_str())) {
     if (_optRZR.SetValue(optionValue)) {
       _rzr = static_cast<int>(_optRZR.GetIntValue());
       return true;
@@ -328,12 +343,13 @@ void ClubFoot::Initialize()
     _node[i].parent = (i > 0) ? &(_node[i - 1]) : this;
   }
 
+  _hashSize = _optHash.GetIntValue();
   _contempt = static_cast<int>(_optContempt.GetIntValue());
+  _delta    = static_cast<int>(_optDelta.GetIntValue());
   _lmr      = static_cast<int>(_optLMR.GetIntValue());
   _rzr      = static_cast<int>(_optRZR.GetIntValue());
   _tempo    = static_cast<int>(_optTempo.GetIntValue());
   _test     = static_cast<int>(_optTest.GetIntValue());
-  _hashSize = _optHash.GetIntValue();
   _ext      = (_optEXT.GetValue() == _TRUE);
   _iid      = (_optIID.GetValue() == _TRUE);
   _nmp      = (_optNMP.GetValue() == _TRUE);
@@ -867,6 +883,19 @@ std::string ClubFoot::MyGo(const int depth,
     Output() << _tt.GetStores() << " stores, " << _tt.GetHits() << " hits, "
              << _tt.GetCheckmates() << " checkmates, "
              << _tt.GetStalemates() << " stalemates";
+
+    if (_chkExts || _oneReplyExts || _hashExts || _deltaCount) {
+      Output() << _chkExts << " check extensions, "
+               << _oneReplyExts << " one reply extensions, "
+               << _hashExts << " hashed extensions, "
+               << _deltaCount << " delta prunings";
+    }
+
+    if (_rzrCount) {
+      Output() << _rzrCount << " razor attempts, "
+               << _rzrCutoffs << " confirmed ("
+               << Percent(_rzrCutoffs, _rzrCount) << "%)";
+    }
 
     if (_nullMoves) {
       Output() << _nullMoves << " null moves, "

@@ -89,35 +89,43 @@ private:
   //--------------------------------------------------------------------------
   // global variables
   //--------------------------------------------------------------------------
-  static bool                _initialized;    // is the engine initialized?
   static bool                _ext;            // check extensions
   static bool                _iid;            // internal iterative deepening
+  static bool                _initialized;    // is the engine initialized?
   static bool                _nmp;            // null move pruning
   static char                _hist[0x100000]; // move performance history
   static int                 _board[128];     // piece positions
-  static int                 _drawScore[2];   // score for getting a draw
   static int                 _contempt;       // contempt for draw value
+  static int                 _delta;          // delta pruning margin
   static int                 _depth;          // current root search depth
+  static int                 _drawScore[2];   // score for getting a draw
   static int                 _lmr;            // late move reduction
   static int                 _movenum;        // current root search move number
-  static int                 _seldepth;       // current selective search depth
   static int                 _rzr;            // razoring delta
+  static int                 _seldepth;       // current selective search depth
   static int                 _tempo;          // tempo bonus for side to move
   static int                 _test;           // new feature test value
   static std::string         _currmove;       // current root search move
   static int64_t             _hashSize;       // transposition table byte size
+  static uint64_t            _chkExts;        // number of check extensions
+  static uint64_t            _deltaCount;     // number of delta prunings
   static uint64_t            _execs;          // Exec calls
-  static uint64_t            _qnodes;         // QSearch calls
-  static uint64_t            _nullMoves;      // ExecNullMove calls
-  static uint64_t            _nmCutoffs;      // null moves cutoffs
+  static uint64_t            _hashExts;       // number of extensions from hash
   static uint64_t            _lmReductions;   // number of late move reductions
   static uint64_t            _lmResearches;   // lms re-searched at full depth
+  static uint64_t            _nmCutoffs;      // null moves cutoffs
+  static uint64_t            _nullMoves;      // ExecNullMove calls
+  static uint64_t            _oneReplyExts;   // number of 1 reply extensions
+  static uint64_t            _qnodes;         // QSearch calls
+  static uint64_t            _rzrCount;       // number of time razoring used
+  static uint64_t            _rzrCutoffs;     // number of <= alpha rzr results
   static ClubFoot            _node[MaxPlies]; // the node stack
   static std::set<uint64_t>  _seen;           // position keys already seen
   static TranspositionTable  _tt;             // info about visited positions
+  static senjo::EngineOption _optHash;        // hash size option
   static senjo::EngineOption _optClearHash;   // clear hash option
   static senjo::EngineOption _optContempt;    // contempt for draw option
-  static senjo::EngineOption _optHash;        // hash size option
+  static senjo::EngineOption _optDelta;       // delta pruning margin option
   static senjo::EngineOption _optEXT;         // check extensions option
   static senjo::EngineOption _optIID;         // intrnl iterative deepening opt
   static senjo::EngineOption _optLMR;         // late move reductions option
@@ -144,13 +152,15 @@ private:
   //--------------------------------------------------------------------------
   int       ply;             // which ply is this node at?
   int       standPat;        // positional eval from perspective of side to move
-  int       pieceCount;      // how many pieces does the side to move have?
   int       extended;        // plies the search at this node was extended
   int       reduced;         // plies the search at this node was reduced
   int       nullMoveOk;      // ok to try null move at this node?
   int       moveCount;       // number of moves in this node's 'moves' array
   int       moveIndex;       // which move in 'moves' array this node is on
   int       pvCount;         // move count in this node's principal variation
+  int       pieceCount[14];  // piece counts per type
+  int       kingEval[2];     // king positional evaluation score per color
+  char      passers[128];    // location of passers (2) and semi-passers (1)
   char      openFile[2][8];  // files with no pawns (per color)
   ClubFoot* child;           // the node 1 ply after this node
   ClubFoot* parent;          // the node 1 ply before this one
@@ -243,8 +253,7 @@ private:
   inline void IncHistory(const Move& move, const bool check, const int depth) {
     if (!check && (depth > 0)) {
       const int idx = move.GetHistoryIndex();
-      const int val = (_hist[idx] + depth);
-      _hist[idx] = static_cast<char>(std::min<int>(val, 100));
+      _hist[idx] = static_cast<char>(std::max<int>(_hist[idx], depth));
     }
   }
 
@@ -255,7 +264,7 @@ private:
     if (!check) {
       const int idx = move.GetHistoryIndex();
       const int val = (_hist[idx] - 1);
-      _hist[idx] = static_cast<char>(std::max<int>(val, -100));
+      _hist[idx] = static_cast<char>(std::max<int>(val, -2));
     }
   }
 
@@ -689,10 +698,7 @@ private:
         move.Score() += 50;
       }
       else {
-        score = _hist[move.GetHistoryIndex()];
-        if (score > 3) {
-          move.Score() += (score / 4);
-        }
+        move.Score() += _hist[move.GetHistoryIndex()];
       }
     }
   }
@@ -1773,11 +1779,15 @@ private:
         if (opFlanks) {
           bonus /= 2;
           passed = false; // allow backward pawn penalty
+          passers[sqr.Name()] = 1;
         }
 
-        // increase bonus if completely pased and has support
-        else if (diff > 0) {
-          bonus += (bonus / 3);
+        else {
+          // increase bonus if completely passed and has support
+          if (diff > 0) {
+            bonus += (bonus / 3);
+          }
+          passers[sqr.Name()] = 2;
         }
 
         // reduce bonus if blocked
@@ -2031,6 +2041,7 @@ private:
       score -= static_cast<int>(MidGame(color) * val);
     }
 
+    kingEval[color] = score;
     return score;
   }
 
@@ -2045,14 +2056,14 @@ private:
   //! very minimal evaluation techniques are used in Clubfoot.
   //--------------------------------------------------------------------------
   inline void Evaluate() {
-    int typeCount[14] = {0};
     int pieceStack[32];
     int stackCount = 0;
     int pc;
     int eval = (material[White] - material[Black] +
                 (ColorToMove() ? -_tempo : _tempo));
 
-    pieceCount = 0;
+    memset(pieceCount, 0, sizeof(pieceCount));
+    memset(passers, 0, sizeof(passers));
     memset(openFile, 1, sizeof(openFile));
 
     // evaluate pawns first to populate openFile map
@@ -2068,11 +2079,8 @@ private:
       case (Black|Rook):
       case (White|Queen):
       case (Black|Queen):
-        typeCount[COLOR_OF(pc)]++;
+        pieceCount[COLOR_OF(pc)]++;
         pieceStack[stackCount++] = sqr.Name();
-        if (COLOR_OF(pc) == ColorToMove()) {
-          pieceCount++;
-        }
         break;
       case (White|King):
       case (Black|King):
@@ -2083,22 +2091,22 @@ private:
         assert(pc == 0);
         continue;
       }
-      typeCount[pc]++;
+      pieceCount[pc]++;
     }
 
-    bool whiteCanWin = (typeCount[White|Pawn] ||
-                       (typeCount[White|Knight] > 2) ||
-                       (typeCount[White|Bishop] > 1) ||
-                       (typeCount[White|Knight] && typeCount[White|Bishop]) ||
-                        typeCount[White|Rook] ||
-                        typeCount[White|Queen]);
+    bool whiteCanWin = (pieceCount[White|Pawn] ||
+                       (pieceCount[White|Knight] > 2) ||
+                       (pieceCount[White|Bishop] > 1) ||
+                       (pieceCount[White|Knight] && pieceCount[White|Bishop]) ||
+                        pieceCount[White|Rook] ||
+                        pieceCount[White|Queen]);
 
-    bool blackCanWin = (typeCount[Black|Pawn] ||
-                       (typeCount[Black|Knight] > 2) ||
-                       (typeCount[Black|Bishop] > 1) ||
-                       (typeCount[Black|Knight] && typeCount[Black|Bishop]) ||
-                        typeCount[Black|Rook] ||
-                        typeCount[Black|Queen]);
+    bool blackCanWin = (pieceCount[Black|Pawn] ||
+                       (pieceCount[Black|Knight] > 2) ||
+                       (pieceCount[Black|Bishop] > 1) ||
+                       (pieceCount[Black|Knight] && pieceCount[Black|Bishop]) ||
+                        pieceCount[Black|Rook] ||
+                        pieceCount[Black|Queen]);
 
     // draw due to insufficient mating material?
     if (!whiteCanWin && !blackCanWin) {
@@ -2108,72 +2116,72 @@ private:
     }
 
     // no pawns is bad
-    if (!typeCount[White|Pawn]) {
+    if (!pieceCount[White|Pawn]) {
       eval -= 50;
     }
-    if (!typeCount[Black|Pawn]) {
+    if (!pieceCount[Black|Pawn]) {
       eval += 50;
     }
 
     // decrease value of loner minor pieces
-    if (typeCount[Black|Pawn] && (typeCount[White] == 1) &&
-        (typeCount[White|Knight] || typeCount[White|Bishop]))
+    if (pieceCount[Black|Pawn] && (pieceCount[White] == 1) &&
+        (pieceCount[White|Knight] || pieceCount[White|Bishop]))
     {
       eval -= 50;
     }
-    if (typeCount[White|Pawn] && (typeCount[Black] == 1) &&
-        (typeCount[Black|Knight] || typeCount[Black|Bishop]))
+    if (pieceCount[White|Pawn] && (pieceCount[Black] == 1) &&
+        (pieceCount[Black|Knight] || pieceCount[Black|Bishop]))
     {
       eval += 50;
     }
 
     // total count of pawns on the board - inflated a little bit
-    pc = ((4 * (typeCount[White|Pawn] + typeCount[Black|Pawn])) / 3);
+    pc = ((4 * (pieceCount[White|Pawn] + pieceCount[Black|Pawn])) / 3);
 
     // increase 1 knight and 1 bishop relative to number of pawns on the board
     // to discourage sacrificing a minor for 3 pawns in the opening
-    if (typeCount[White|Knight]) {
+    if (pieceCount[White|Knight]) {
       eval += pc;
     }
-    if (typeCount[White|Bishop]) {
+    if (pieceCount[White|Bishop]) {
       eval += pc;
     }
-    if (typeCount[Black|Knight]) {
+    if (pieceCount[Black|Knight]) {
       eval -= pc;
     }
-    if (typeCount[Black|Bishop]) {
+    if (pieceCount[Black|Bishop]) {
       eval -= pc;
     }
 
     // increase 1 rook as pawns come off the board
-    if (typeCount[White|Rook]) {
+    if (pieceCount[White|Rook]) {
       eval += (22 - pc);
     }
-    if (typeCount[Black|Rook]) {
+    if (pieceCount[Black|Rook]) {
       eval -= (22 - pc);
     }
 
     // bishop pair more valuable as pawns come off the board
     // NOTE: this doesn't verify the bishops are on opposite color squares!
-    if (typeCount[White|Bishop] >= 2) {
+    if (pieceCount[White|Bishop] >= 2) {
       eval += (48 - pc);
     }
-    if (typeCount[Black|Bishop] >= 2) {
+    if (pieceCount[Black|Bishop] >= 2) {
       eval -= (48 - pc);
     }
 
     // redundant knights/rooks are worth slightly less
-    if (typeCount[White|Knight] > 1) {
-      eval -= (16 * (typeCount[White|Knight] - 1));
+    if (pieceCount[White|Knight] > 1) {
+      eval -= (16 * (pieceCount[White|Knight] - 1));
     }
-    if (typeCount[Black|Knight] > 1) {
-      eval += (16 * (typeCount[Black|Knight] - 1));
+    if (pieceCount[Black|Knight] > 1) {
+      eval += (16 * (pieceCount[Black|Knight] - 1));
     }
-    if (typeCount[White|Rook] > 1) {
-      eval -= (20 * (typeCount[White|Rook] - 1));
+    if (pieceCount[White|Rook] > 1) {
+      eval -= (20 * (pieceCount[White|Rook] - 1));
     }
-    if (typeCount[Black|Rook] > 1) {
-      eval += (20 * (typeCount[Black|Rook] - 1));
+    if (pieceCount[Black|Rook] > 1) {
+      eval += (20 * (pieceCount[Black|Rook] - 1));
     }
 
     // evaluate pieces
@@ -2733,7 +2741,7 @@ private:
       return _drawScore[color];
     }
 
-    // mate distance pruning and standPat cutoff when not in check
+    // mate distance pruning and standPat beta cutoff when not in check
     const bool check = InCheck<color>();
     int best = (check ? (ply - Infinity) : standPat);
     if ((best >= beta) || !child) {
@@ -2765,7 +2773,6 @@ private:
         pv[0] = firstMove;
         pvCount = 1;
         if ((entry->score >= beta) && !firstMove.IsCapOrPromo()) {
-          IncHistory(firstMove, check, entry->depth);
           AddKiller(firstMove);
         }
         return entry->score;
@@ -2776,7 +2783,6 @@ private:
           pv[0] = firstMove;
           pvCount = 1;
           if (!firstMove.IsCapOrPromo()) {
-            IncHistory(firstMove, check, entry->depth);
             AddKiller(firstMove);
           }
           return entry->score;
@@ -2841,15 +2847,16 @@ private:
       }
 
       Exec<color>(*move, *child);
-      if (!check &&
+      if (_delta && !check &&
           (move->GetPromo() != (color|Queen)) &&
           ((move->GetScore() < 0) ||
-           ((standPat + move->GetScore() + PawnValue) < alpha)))
+           ((standPat + move->GetScore() + _delta) < alpha)))
       {
         Undo<color>(*move);
         if (_stop) {
           return beta;
         }
+        _deltaCount++;
         continue;
       }
 
@@ -2929,14 +2936,15 @@ private:
     // extend depth if in check and previous ply not extended
     const bool check = InCheck<color>();
     if (_ext && check && !parent->extended) {
+      _chkExts++;
       extended++;
       depth++;
     }
 
     // do we have anything for this position in the transposition table?
     const bool pvNode = ((alpha + 1) < beta);
-    Move firstMove;
     HashEntry* entry = _tt.Probe(positionKey);
+    Move firstMove;
     if (entry) {
       switch (entry->GetPrimaryFlag()) {
       case HashEntry::Checkmate: return (ply - Infinity);
@@ -2944,6 +2952,7 @@ private:
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
         assert(ValidateMove<color>(firstMove) == 0);
+        // TODO add pv flag to hash entry so we can do early outs in pvNode
         if (!pvNode && (entry->depth >= depth) && (entry->score <= alpha)) {
           pv[0] = firstMove;
           pvCount = 1;
@@ -2980,6 +2989,7 @@ private:
         assert(false);
       }
       if (_test && entry->HasExtendedFlag() && !extended && !parent->extended) {
+        _hashExts++;
         extended++;
         depth++;
       }
@@ -2989,14 +2999,17 @@ private:
     // if we're well below alpha and q-search doesn't show a saving tactic
     // return q-search result
     int eval = standPat;
-    if (_rzr && !pvNode && (depth == 2) && (alpha < WinningScore) &&
-        ((standPat + _rzr) < alpha))
+    if (_rzr && !check && !pvNode && !firstMove.IsValid() && (depth <= 2) &&
+        (abs(alpha) < WinningScore) &&
+        ((standPat + _rzr + (64 * (depth - 1))) < alpha))
     {
+      _rzrCount++;
       eval = QSearch<color>(alpha, beta, 0);
       if (_stop) {
         return beta;
       }
       if (eval <= alpha) {
+        _rzrCutoffs++;
         return eval;
       }
     }
@@ -3015,20 +3028,22 @@ private:
       }
       assert(pv[0].IsValid());
       firstMove = pv[0];
+      // TODO _iidCount++;
+      // TODO count eval >= beta
     }
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
     if (_nmp && nullMoveOk && (depth > 1) && (abs(beta) < MateScore) &&
-        (eval >= beta) && // only do NMP if static eval >= beta
-        !pvNode &&        // never do forward pruning on pvNodes
-        !check &&         // can't pass when in check
-        (pieceCount > 0)) // don't pass when stalemates are likely
+        (eval >= beta) &&        // only do NMP if static eval >= beta
+        !pvNode &&               // never do forward pruning on pvNodes
+        !check &&                // can't pass when in check
+        (pieceCount[color] > 0)) // only pass when stalemates are unlikely
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
-      int rdepth = std::max<int>(0, (depth - 3 - (depth / 6) -
-                                     ((eval - beta) >= 400)));
+      const int rdepth = std::max<int>(0, (depth - 3 - (depth / 6) -
+                                           ((eval - beta) >= 400)));
       eval = (rdepth > 0)
           ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
           : -child->QSearch<!color>(-beta, (1 - beta), 0);
@@ -3056,6 +3071,7 @@ private:
       }
       firstMove = *GetNextMove();
       if (_test && (moveCount == 1) && !extended) {
+        _oneReplyExts++;
         extended++;
         depth++;
       }
@@ -3096,6 +3112,7 @@ private:
       GenerateMoves<color, false>(depth);
       assert(moveCount > 0);
       if (_test && (moveCount == 1) && !extended) {
+        _oneReplyExts++;
         extended++;
         depth++;
       }
@@ -3120,13 +3137,16 @@ private:
       if (lmr_ok &&
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
-          (_hist[move->GetHistoryIndex()] < 1) &&
           !((move->GetPc() == (color|Pawn)) &&
             (move->GetTo().Y() == (color ? 1 : 6))) &&
-          !child->InCheck<!color>())
+          !child->InCheck<!color>() &&
+          (_hist[move->GetHistoryIndex()] < 0))
       {
         _lmReductions++;
         reduced = _lmr;
+        if ((depth > (reduced + 1)) && (_hist[move->GetHistoryIndex()] < -1)) {
+          reduced++;
+        }
       }
       else {
         reduced = 0;
@@ -3352,21 +3372,26 @@ private:
   void InitSearch() {
     _tt.ResetCounters();
     _currmove.clear();
+    _chkExts      = 0;
+    _deltaCount   = 0;
     _depth        = 0;
-    _movenum      = 0;
-    _seldepth     = 0;
     _execs        = 0;
-    _qnodes       = 0;
-    _nullMoves    = 0;
-    _nmCutoffs    = 0;
+    _hashExts     = 0;
     _lmReductions = 0;
     _lmResearches = 0;
+    _movenum      = 0;
+    _nmCutoffs    = 0;
+    _nullMoves    = 0;
+    _oneReplyExts = 0;
+    _qnodes       = 0;
+    _rzrCount     = 0;
+    _rzrCutoffs   = 0;
+    _seldepth     = 0;
 
     _drawScore[ColorToMove()] = -_contempt;
     _drawScore[!ColorToMove()] = _contempt;
   }
 };
-
 
 } // namespace clubfoot
 
