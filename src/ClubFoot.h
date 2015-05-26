@@ -253,7 +253,8 @@ private:
   inline void IncHistory(const Move& move, const bool check, const int depth) {
     if (!check && (depth > 0)) {
       const int idx = move.GetHistoryIndex();
-      _hist[idx] = static_cast<char>(std::max<int>(_hist[idx], depth));
+      const int val = (_hist[idx] + depth + 2); // TODO remove + 2?
+      _hist[idx] = static_cast<char>(std::min<int>(val, 40));
     }
   }
 
@@ -2123,65 +2124,54 @@ private:
       eval += 50;
     }
 
-    // decrease value of loner minor pieces
-    if (pieceCount[Black|Pawn] && (pieceCount[White] == 1) &&
+    // decrease value of loner knights and bishops
+    if ((pieceCount[White] == 1) &&
         (pieceCount[White|Knight] || pieceCount[White|Bishop]))
     {
       eval -= 50;
     }
-    if (pieceCount[White|Pawn] && (pieceCount[Black] == 1) &&
+    if ((pieceCount[Black] == 1) &&
         (pieceCount[Black|Knight] || pieceCount[Black|Bishop]))
     {
       eval += 50;
     }
 
-    // total count of pawns on the board - inflated a little bit
-    pc = ((4 * (pieceCount[White|Pawn] + pieceCount[Black|Pawn])) / 3);
-
-    // increase 1 knight and 1 bishop relative to number of pawns on the board
-    // to discourage sacrificing a minor for 3 pawns in the opening
-    if (pieceCount[White|Knight]) {
-      eval += pc;
-    }
-    if (pieceCount[White|Bishop]) {
-      eval += pc;
-    }
-    if (pieceCount[Black|Knight]) {
-      eval -= pc;
-    }
-    if (pieceCount[Black|Bishop]) {
-      eval -= pc;
-    }
-
-    // increase 1 rook as pawns come off the board
-    if (pieceCount[White|Rook]) {
-      eval += (22 - pc);
-    }
-    if (pieceCount[Black|Rook]) {
-      eval -= (22 - pc);
-    }
-
-    // bishop pair more valuable as pawns come off the board
-    // NOTE: this doesn't verify the bishops are on opposite color squares!
-    if (pieceCount[White|Bishop] >= 2) {
-      eval += (48 - pc);
-    }
-    if (pieceCount[Black|Bishop] >= 2) {
-      eval -= (48 - pc);
-    }
-
-    // redundant knights/rooks are worth slightly less
+    // redundant knights are worth slightly less
     if (pieceCount[White|Knight] > 1) {
       eval -= (16 * (pieceCount[White|Knight] - 1));
     }
     if (pieceCount[Black|Knight] > 1) {
       eval += (16 * (pieceCount[Black|Knight] - 1));
     }
-    if (pieceCount[White|Rook] > 1) {
-      eval -= (20 * (pieceCount[White|Rook] - 1));
-    }
-    if (pieceCount[Black|Rook] > 1) {
-      eval += (20 * (pieceCount[Black|Rook] - 1));
+
+    // are there any pawns on the board?
+    if ((pc = (pieceCount[White|Pawn] + pieceCount[Black|Pawn]))) {
+      // increase value of 1 knight relative to # of pawns on the board
+      pc = ((4 * pc) / 3); // inflate pawn count a little bit
+      if (pieceCount[White|Knight]) {
+        eval += pc;
+      }
+      if (pieceCount[Black|Knight]) {
+        eval -= pc;
+      }
+
+      // increase value of 1 rook as pawns come off the board
+      pc = ((4 * pc) / 3); // inflate pawn count a bit more
+      if (pieceCount[White|Rook]) {
+        eval += (28 - pc);
+      }
+      if (pieceCount[Black|Rook]) {
+        eval -= (28 - pc);
+      }
+
+      // bishop pair more valuable as pawns come off the board
+      // NOTE: this doesn't verify the bishops are on opposite color squares!
+      if (pieceCount[White|Bishop] >= 2) {
+        eval += (48 - pc);
+      }
+      if (pieceCount[Black|Bishop] >= 2) {
+        eval -= (48 - pc);
+      }
     }
 
     // evaluate pieces
@@ -2223,7 +2213,7 @@ private:
     }
 
     // round score to multiple of 8
-    eval = ((eval >> 3) << 3);
+    eval = ((eval / 8) * 8);
 
     // convert to perspective of side to move
     standPat = (ColorToMove() ? -eval : eval);
