@@ -2948,6 +2948,9 @@ private:
           pvCount = 1;
           return entry->score;
         }
+        if ((entry->depth >= (depth - 3)) && (entry->score < beta)) {
+          nullMoveOk = 0;
+        }
         break;
       case HashEntry::ExactScore:
         firstMove.Init(entry->moveBits, entry->score);
@@ -2960,6 +2963,9 @@ private:
             AddKiller(firstMove);
           }
           return entry->score;
+        }
+        if ((entry->depth >= (depth - 3)) && (entry->score < beta)) {
+          nullMoveOk = 0;
         }
         break;
       case HashEntry::LowerBound:
@@ -2988,7 +2994,7 @@ private:
     // razoring
     // if we're well below alpha and q-search doesn't show a saving tactic
     // return q-search result
-    int eval = standPat;
+    int eval;
     if (_rzr && !check && !pvNode && !firstMove.IsValid() && (depth <= 2) &&
         (abs(alpha) < WinningScore) &&
         ((standPat + _rzr + (64 * (depth - 1))) < alpha))
@@ -3005,6 +3011,7 @@ private:
     }
 
     // internal iterative deepening if no firstMove in transposition table
+    eval = standPat;
     if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
         (depth > (pvNode ? 3 : 5)))
     {
@@ -3016,6 +3023,7 @@ private:
       if (_stop || !pvCount) {
         return eval;
       }
+      eval = std::min<int>(eval, standPat);
       assert(pv[0].IsValid());
       firstMove = pv[0];
       // TODO _iidCount++;
@@ -3024,11 +3032,10 @@ private:
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
-    if (_nmp && nullMoveOk && (depth > 1) && (abs(beta) < MateScore) &&
-        (eval >= beta) &&        // only do NMP if static eval >= beta
-        !pvNode &&               // never do forward pruning on pvNodes
-        !check &&                // can't pass when in check
-        (pieceCount[color] > 0)) // only pass when stalemates are unlikely
+    if (_nmp && nullMoveOk && !check && !pvNode && (depth > 1) &&
+        (eval >= beta) &&
+        (beta > -MateScore) &&
+        (pieceCount[color] > 0))
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
@@ -3041,12 +3048,14 @@ private:
         return beta;
       }
       if (eval >= beta) {
+        // TODO do verification search at high depths
         pvCount = 0;
         _nmCutoffs++;
         return beta; // do not return eval
       }
+      // TODO return alpha if threat detected and it was enabled by parent move
+      // TODO if threat and NOT caused by parent move do parent->nullMoveOK = 0
     }
-    child->nullMoveOk = 1;
 
     // make sure firstMove is populated
     if (!firstMove.IsValid()) {
@@ -3070,6 +3079,7 @@ private:
     // search first move with full alpha/beta window
     const int orig_alpha = alpha;
     Exec<color>(firstMove, *child);
+    child->nullMoveOk = 1;
     eval = (depth > 1)
         ? -child->Search<!color>(-beta, -alpha, (depth - 1), !cutNode)
         : -child->QSearch<!color>(-beta, -alpha, 0);
@@ -3144,9 +3154,11 @@ private:
 
       // first search with a null window to quickly see if it improves alpha
       newDepth = (depth - 1 - reduced);
+      child->nullMoveOk = 1;
       eval = (newDepth > 0)
           ? -child->Search<!color>(-(alpha + 1), -alpha, newDepth, true)
           : -child->QSearch<!color>(-(alpha + 1), -alpha, 0);
+      child->nullMoveOk = 0;
 
       // re-search at full depth?
       if (!_stop && reduced && (eval > alpha)) {
