@@ -29,6 +29,7 @@
 #include "Types.h"
 #include "Move.h"
 #include "HashTable.h"
+#include "Stats.h"
 
 namespace clubfoot
 {
@@ -45,19 +46,20 @@ public:
   std::string GetEngineName() const;
   std::string GetEngineVersion() const;
   std::string GetAuthorName() const;
+  std::string GetFEN() const;
   std::list<senjo::EngineOption> GetOptions() const;
-  bool SetEngineOption(const std::string& optionName,
-                       const std::string& optionValue);
-  void Initialize();
+  bool SetEngineOption(const std::string& name, const std::string& value);
   bool IsInitialized() const;
+  bool WhiteToMove() const;
   const char* SetPosition(const char* fen);
   const char* MakeMove(const char* str);
-  std::string GetFEN() const;
   void PrintBoard() const;
-  bool WhiteToMove() const;
+  void Initialize();
   void ClearSearchData();
   void PonderHit();
   void Quit();
+  void ResetStatsTotals();
+  void ShowStatsTotals() const;
   void GetStats(int* depth,
                 int* seldepth = NULL,
                 uint64_t* nodes = NULL,
@@ -93,6 +95,7 @@ private:
   static bool                _iid;            // internal iterative deepening
   static bool                _initialized;    // is the engine initialized?
   static bool                _nmp;            // null move pruning
+  static bool                _oneReply;       // one reply extensions
   static char                _hist[0x100000]; // move performance history
   static int                 _board[128];     // piece positions
   static int                 _contempt;       // contempt for draw value
@@ -107,20 +110,10 @@ private:
   static int                 _test;           // new feature test value
   static std::string         _currmove;       // current root search move
   static int64_t             _hashSize;       // transposition table byte size
-  static uint64_t            _chkExts;        // number of check extensions
-  static uint64_t            _deltaCount;     // number of delta prunings
-  static uint64_t            _execs;          // Exec calls
-  static uint64_t            _hashExts;       // number of extensions from hash
-  static uint64_t            _lmReductions;   // number of late move reductions
-  static uint64_t            _lmResearches;   // lms re-searched at full depth
-  static uint64_t            _nmCutoffs;      // null moves cutoffs
-  static uint64_t            _nullMoves;      // ExecNullMove calls
-  static uint64_t            _oneReplyExts;   // number of 1 reply extensions
-  static uint64_t            _qnodes;         // QSearch calls
-  static uint64_t            _rzrCount;       // number of time razoring used
-  static uint64_t            _rzrCutoffs;     // number of <= alpha rzr results
   static ClubFoot            _node[MaxPlies]; // the node stack
   static std::set<uint64_t>  _seen;           // position keys already seen
+  static Stats               _stats;          // misc counters
+  static Stats               _totalStats;     // sum of misc counters
   static TranspositionTable  _tt;             // info about visited positions
   static senjo::EngineOption _optHash;        // hash size option
   static senjo::EngineOption _optClearHash;   // clear hash option
@@ -130,6 +123,7 @@ private:
   static senjo::EngineOption _optIID;         // intrnl iterative deepening opt
   static senjo::EngineOption _optLMR;         // late move reductions option
   static senjo::EngineOption _optNMP;         // null move pruning option
+  static senjo::EngineOption _optOneReply;    // one reply extensions options
   static senjo::EngineOption _optRZR;         // razoring delta option
   static senjo::EngineOption _optTempo;       // tempo bonus option
   static senjo::EngineOption _optTest;        // new feature testing option
@@ -253,7 +247,7 @@ private:
   inline void IncHistory(const Move& move, const bool check, const int depth) {
     if (!check && (depth > 0)) {
       const int idx = move.GetHistoryIndex();
-      const int val = (_hist[idx] + depth + 2); // TODO remove + 2?
+      const int val = (_hist[idx] + depth + 2);
       _hist[idx] = static_cast<char>(std::min<int>(val, 40));
     }
   }
@@ -313,11 +307,12 @@ private:
       const uint64_t msecs = (senjo::Now() - _startTime);
       senjo::Output out(senjo::Output::NoPrefix);
 
+      const uint64_t nodes = (_stats.snodes + _stats.qnodes);
       out << "info depth " << _depth
           << " seldepth " << _seldepth
-          << " nodes " << _execs
+          << " nodes " << nodes
           << " time " << msecs
-          << " nps " << static_cast<uint64_t>(senjo::Rate(_execs, msecs));
+          << " nps " << static_cast<uint64_t>(senjo::Rate(nodes, msecs));
 
       if (bound) {
         out << " currmovenumber " << _movenum
@@ -2229,7 +2224,7 @@ private:
     assert(!AttackedBy<!color>(king[color]));
     assert(&dest != this);
 
-    _nullMoves++;
+    _stats.nullMoves++;
 
     dest.king[White] = king[White];
     dest.king[Black] = king[Black];
@@ -2415,7 +2410,7 @@ private:
     assert(ColorToMove() == color);
     assert(ValidateMove<color>(move) == 0);
 
-    _execs++;
+    _stats.execs++;
     _seen.insert(positionKey);
 
     switch (move.GetType()) {
@@ -2721,7 +2716,7 @@ private:
     assert(abs(beta) <= Infinity);
     assert(depth <= 0);
 
-    _qnodes++;
+    _stats.qnodes++;
     if (ply > _seldepth) {
       _seldepth = ply;
     }
@@ -2791,6 +2786,7 @@ private:
     // search firstMove if we have it
     const int orig_alpha = alpha;
     if (firstMove.IsValid()) {
+      _stats.qexecs++;
       Exec<color>(firstMove, *child);
       firstMove.Score() = -child->QSearch<!color>(-beta, -alpha, (depth - 1));
       Undo<color>(firstMove);
@@ -2806,7 +2802,7 @@ private:
           }
           if (check) {
             firstMove.Score() = beta;
-            _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound, false);
+            _tt.Store(positionKey, firstMove, 0, HashEntry::LowerBound, 0);
           }
           return best;
         }
@@ -2836,17 +2832,17 @@ private:
         continue;
       }
 
+      _stats.qexecs++;
       Exec<color>(*move, *child);
-      if (_delta && !check &&
-          (move->GetPromo() != (color|Queen)) &&
-          ((move->GetScore() < 0) ||
-           ((standPat + move->GetScore() + _delta) < alpha)))
+      if (_delta && !check && (depth < 0) && !move->GetPromo() &&
+          ((standPat + ValueOf(move->GetCap()) + _delta) <= alpha) &&
+          !child->InCheck<!color>())
       {
         Undo<color>(*move);
         if (_stop) {
           return beta;
         }
-        _deltaCount++;
+        _stats.deltaCount++;
         continue;
       }
 
@@ -2865,7 +2861,7 @@ private:
           }
           if (check) {
             move->Score() = beta;
-            _tt.Store(positionKey, *move, 0, HashEntry::LowerBound, false);
+            _tt.Store(positionKey, *move, 0, HashEntry::LowerBound, 0);
           }
           return best;
         }
@@ -2881,13 +2877,13 @@ private:
     if (check && (pvCount > 0)) {
       if (alpha > orig_alpha) {
         assert(pv[0].GetScore() == alpha);
-        _tt.Store(positionKey, pv[0], 0, HashEntry::ExactScore, false);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::ExactScore, 0);
       }
       else {
         assert(alpha == orig_alpha);
         assert(pv[0].GetScore() <= alpha);
         pv[0].Score() = alpha;
-        _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound, false);
+        _tt.Store(positionKey, pv[0], 0, HashEntry::UpperBound, 0);
       }
     }
 
@@ -2905,6 +2901,7 @@ private:
     assert(abs(beta) <= Infinity);
     assert(depth > 0);
 
+    _stats.snodes++;
     extended  = 0;
     reduced   = 0;
     moveCount = 0;
@@ -2926,13 +2923,13 @@ private:
     // extend depth if in check and previous ply not extended
     const bool check = InCheck<color>();
     if (_ext && check && !parent->extended) {
-      _chkExts++;
+      _stats.chkExts++;
       extended++;
       depth++;
     }
 
     // do we have anything for this position in the transposition table?
-    const bool pvNode = ((alpha + 1) < beta);
+    const bool pvNode = ((alpha + 1) != beta);
     HashEntry* entry = _tt.Probe(positionKey);
     Move firstMove;
     if (entry) {
@@ -2942,8 +2939,9 @@ private:
       case HashEntry::UpperBound:
         firstMove.Init(entry->moveBits, entry->score);
         assert(ValidateMove<color>(firstMove) == 0);
-        // TODO add pv flag to hash entry so we can do early outs in pvNode
-        if (!pvNode && (entry->depth >= depth) && (entry->score <= alpha)) {
+        if ((entry->depth >= depth) && (entry->score <= alpha) &&
+            (!pvNode || entry->HasPvFlag()))
+        {
           pv[0] = firstMove;
           pvCount = 1;
           return entry->score;
@@ -2971,7 +2969,9 @@ private:
       case HashEntry::LowerBound:
         firstMove.Init(entry->moveBits, entry->score);
         assert(ValidateMove<color>(firstMove) == 0);
-        if (!pvNode && (entry->depth >= depth) && (entry->score >= beta)) {
+        if ((entry->depth >= depth) && (entry->score >= beta) &&
+            (!pvNode || entry->HasPvFlag()))
+        {
           pv[0] = firstMove;
           pvCount = 1;
           if (!firstMove.IsCapOrPromo()) {
@@ -2984,8 +2984,8 @@ private:
       default:
         assert(false);
       }
-      if (_test && entry->HasExtendedFlag() && !extended && !parent->extended) {
-        _hashExts++;
+      if (entry->HasExtendedFlag() && !extended && !parent->extended) {
+        _stats.hashExts++;
         extended++;
         depth++;
       }
@@ -2999,48 +2999,27 @@ private:
         (abs(alpha) < WinningScore) &&
         ((standPat + _rzr + (64 * (depth - 1))) < alpha))
     {
-      _rzrCount++;
+      _stats.rzrCount++;
       eval = QSearch<color>(alpha, beta, 0);
       if (_stop) {
         return beta;
       }
       if (eval <= alpha) {
-        _rzrCutoffs++;
+        _stats.rzrCutoffs++;
         return eval;
       }
-    }
-
-    // internal iterative deepening if no firstMove in transposition table
-    eval = standPat;
-    if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
-        (depth > (pvNode ? 3 : 5)))
-    {
-      assert(!pvCount);
-      const int saved = nullMoveOk;
-      nullMoveOk = 0;
-      eval = Search<color>((beta - 1), beta, (depth - (pvNode ? 2 : 4)), true);
-      nullMoveOk = saved;
-      if (_stop || !pvCount) {
-        return eval;
-      }
-      eval = std::min<int>(eval, standPat);
-      assert(pv[0].IsValid());
-      firstMove = pv[0];
-      // TODO _iidCount++;
-      // TODO count eval >= beta
     }
 
     // null move pruning
     // if we can get a score >= beta without even making a move, return beta
     if (_nmp && nullMoveOk && !check && !pvNode && (depth > 1) &&
-        (eval >= beta) &&
-        (beta > -MateScore) &&
-        (pieceCount[color] > 0))
+        (standPat >= beta) && (abs(beta) < WinningScore) &&
+        (pieceCount[color] > 1))
     {
       ExecNullMove<color>(*child);
       child->nullMoveOk = 0;
       const int rdepth = std::max<int>(0, (depth - 3 - (depth / 6) -
-                                           ((eval - beta) >= 400)));
+                                           ((standPat - beta) >= 400)));
       eval = (rdepth > 0)
           ? -child->Search<!color>(-beta, (1 - beta), rdepth, false)
           : -child->QSearch<!color>(-beta, (1 - beta), 0);
@@ -3050,11 +3029,31 @@ private:
       if (eval >= beta) {
         // TODO do verification search at high depths
         pvCount = 0;
-        _nmCutoffs++;
+        _stats.nmCutoffs++;
         return beta; // do not return eval
       }
       // TODO return alpha if threat detected and it was enabled by parent move
       // TODO if threat and NOT caused by parent move do parent->nullMoveOK = 0
+    }
+
+    // internal iterative deepening if no firstMove in transposition table
+    if (_iid && !check && !firstMove.IsValid() && (beta < Infinity) &&
+        (depth > (pvNode ? 3 : 5)))
+    {
+      assert(!pvCount);
+      _stats.iidCount++;
+      const int saved = nullMoveOk;
+      nullMoveOk = 0;
+      eval = Search<color>((beta - 1), beta, (depth - (pvNode ? 2 : 4)), true);
+      nullMoveOk = saved;
+      if (_stop || !pvCount) {
+        return eval;
+      }
+      if (eval >= beta) {
+        _stats.iidBeta++;
+      }
+      assert(pv[0].IsValid());
+      firstMove = pv[0];
     }
 
     // make sure firstMove is populated
@@ -3069,8 +3068,8 @@ private:
         return _drawScore[0];
       }
       firstMove = *GetNextMove();
-      if (_test && (moveCount == 1) && !extended) {
-        _oneReplyExts++;
+      if (_oneReply && (moveCount == 1) && !extended) {
+        _stats.oneReplyExts++;
         extended++;
         depth++;
       }
@@ -3087,6 +3086,9 @@ private:
     if (_stop) {
       return beta;
     }
+    if (eval > alpha) {
+      alpha = eval;
+    }
     if (eval >= best) {
       best = eval;
       UpdatePV(firstMove);
@@ -3096,11 +3098,10 @@ private:
           AddKiller(firstMove);
         }
         firstMove.Score() = beta;
-        _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound, extended);
+        _tt.Store(positionKey, firstMove, depth, HashEntry::LowerBound,
+                  ((extended ? HashEntry::Extended : 0) |
+                   (pvNode ? HashEntry::FromPV : 0)));
         return best;
-      }
-      if (eval > alpha) {
-        alpha = eval;
       }
     }
     else if (!firstMove.IsCapOrPromo()) {
@@ -3111,14 +3112,14 @@ private:
     if (moveCount <= 0) {
       GenerateMoves<color, false>(depth);
       assert(moveCount > 0);
-      if (_test && (moveCount == 1) && !extended) {
-        _oneReplyExts++;
+      if (_oneReply && (moveCount == 1) && !extended) {
+        _stats.oneReplyExts++;
         extended++;
         depth++;
       }
     }
 
-    bool lmr_ok = (_lmr && !check && (depth > (_lmr + 1)));
+    bool lmr_ok = (_lmr && !pvNode && !check && (depth > (_lmr + 1)));
     int pvDepth = depth;
     int newDepth;
     Move* move;
@@ -3134,6 +3135,8 @@ private:
       Exec<color>(*move, *child);
 
       // late move reductions
+      _stats.lateMoves++;
+      _stats.lmCandidates += lmr_ok;
       if (lmr_ok &&
           !move->IsCapOrPromo() &&
           !IsKiller(*move) &&
@@ -3142,9 +3145,10 @@ private:
           !child->InCheck<!color>() &&
           (_hist[move->GetHistoryIndex()] < 0))
       {
-        _lmReductions++;
+        _stats.lmReductions++;
         reduced = _lmr;
         if ((depth > (reduced + 1)) && (_hist[move->GetHistoryIndex()] < -1)) {
+          _stats.lmDoubleRed++;
           reduced++;
         }
       }
@@ -3163,9 +3167,12 @@ private:
       // re-search at full depth?
       if (!_stop && reduced && (eval > alpha)) {
         assert(depth > 1);
-        _lmResearches++;
+        _stats.lmResearches++;
         reduced = 0;
         eval = -child->Search<!color>(-(alpha + 1), -alpha, (depth - 1), false);
+        if (!_stop && (eval > alpha)) {
+          _stats.lmConfirmed++;
+        }
       }
 
       // re-search with full window?
@@ -3180,6 +3187,10 @@ private:
       if (_stop) {
         return beta;
       }
+      if (eval > alpha) {
+        alpha = eval;
+        _stats.lmAlphaIncs++;
+      }
       if (eval > best) {
         best = eval;
         UpdatePV(*move);
@@ -3190,11 +3201,10 @@ private:
             AddKiller(*move);
           }
           move->Score() = beta;
-          _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound, extended);
+          _tt.Store(positionKey, *move, pvDepth, HashEntry::LowerBound,
+                    ((extended ? HashEntry::Extended : 0) |
+                     (pvNode ? HashEntry::FromPV : 0)));
           return best;
-        }
-        if (eval > alpha) {
-          alpha = eval;
         }
       }
       else if (!move->IsCapOrPromo()) {
@@ -3212,11 +3222,15 @@ private:
         if (!pv[0].IsCapOrPromo()) {
           IncHistory(pv[0], check, pvDepth);
         }
-        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::ExactScore, extended);
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::ExactScore,
+            ((extended ? HashEntry::Extended : 0) |
+             (pvNode ? HashEntry::FromPV : 0)));
       }
       else {
         assert(alpha == orig_alpha);
-        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound, extended);
+        _tt.Store(positionKey, pv[0], pvDepth, HashEntry::UpperBound,
+            ((extended ? HashEntry::Extended : 0) |
+             (pvNode ? HashEntry::FromPV : 0)));
       }
     }
 
@@ -3350,7 +3364,8 @@ private:
           UpdatePV(*move);
           OutputPV(move->GetScore());
           showPV = false;
-          _tt.Store(positionKey, *move, _depth, HashEntry::ExactScore, false);
+          _tt.Store(positionKey, *move, _depth, HashEntry::ExactScore,
+                    HashEntry::FromPV);
 
           // set null aspiration window now that we have a principal variation
           best = alpha = move->GetScore();
@@ -3372,23 +3387,13 @@ private:
   //! Initialize search variables
   //--------------------------------------------------------------------------
   void InitSearch() {
-    _tt.ResetCounters();
     _currmove.clear();
-    _chkExts      = 0;
-    _deltaCount   = 0;
-    _depth        = 0;
-    _execs        = 0;
-    _hashExts     = 0;
-    _lmReductions = 0;
-    _lmResearches = 0;
-    _movenum      = 0;
-    _nmCutoffs    = 0;
-    _nullMoves    = 0;
-    _oneReplyExts = 0;
-    _qnodes       = 0;
-    _rzrCount     = 0;
-    _rzrCutoffs   = 0;
-    _seldepth     = 0;
+    _stats.Clear();
+    _tt.ResetCounters();
+
+    _depth    = 0;
+    _movenum  = 0;
+    _seldepth = 0;
 
     _drawScore[ColorToMove()] = -_contempt;
     _drawScore[!ColorToMove()] = _contempt;

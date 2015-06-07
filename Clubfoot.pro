@@ -24,6 +24,7 @@ include(gitrev.pri)
 SOURCES += \
     src/ClubFoot.cpp \
     src/HashTable.cpp \
+    src/Stats.cpp \
     src/main.cpp \
     senjo/src/BackgroundCommand.cpp \
     senjo/src/ChessEngine.cpp \
@@ -36,6 +37,7 @@ SOURCES += \
 HEADERS += \
     src/ClubFoot.h \
     src/Move.h \
+    src/Stats.h \
     src/Types.h \
     src/HashTable.h \
     senjo/src/BackgroundCommand.h \

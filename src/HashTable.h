@@ -54,7 +54,9 @@ public:
     PrimaryMask = 0x07,
 
     // other flags
-    Extended    = 0x08
+    Extended    = 0x08,
+    FromPV      = 0x10,
+    OtherMask   = 0x18
   };
 
   //--------------------------------------------------------------------------
@@ -71,6 +73,13 @@ public:
     return (flags & HashEntry::Extended);
   }
 
+  //--------------------------------------------------------------------------
+  //! \return true if the FromPV flag is set on this entry
+  //--------------------------------------------------------------------------
+  bool HasPvFlag() const {
+    return (flags & HashEntry::FromPV);
+  }
+
   uint64_t positionKey;
   uint32_t moveBits;
   int16_t  score;
@@ -80,12 +89,6 @@ public:
 
 //----------------------------------------------------------------------------
 //! \brief The transposition table
-//! This implementation assumes the L1 cache line size is 64 bits, which is
-//! only large enough to hold one entry.  Some engines assume a 128 bit cache
-//! entry size and store multiple entries (also usually 64 bit) per table
-//! slot.  It would be a relatively trivial matter to make this configurable,
-//! but for the sake of simplicity this implementation will stick to one 64-bit
-//! entry per table slot.
 //----------------------------------------------------------------------------
 class TranspositionTable
 {
@@ -192,13 +195,13 @@ public:
   //! \param bestmove The best move for the given position key
   //! \param depth The search depth used to obtain bestmove
   //! \param primaryFlag The primary HashEntry::Flag to assign to this entry
-  //! \param extended Was the search on this move extended?
+  //! \param otherFlags Or-ed set of additional entry flags
   //--------------------------------------------------------------------------
   void Store(const uint64_t key,
              const Move& bestmove,
              const int depth,
              const int primaryFlag,
-             const int extended)
+             const int otherFlags)
   {
     assert(bestmove.IsValid());
     assert(abs(bestmove.GetScore()) < Infinity);
@@ -206,16 +209,16 @@ public:
     assert((primaryFlag == HashEntry::LowerBound) ||
            (primaryFlag == HashEntry::UpperBound) ||
            (primaryFlag == HashEntry::ExactScore));
+    assert(!(otherFlags & ~HashEntry::OtherMask));
 
-    if (key && entries) {
+    if (key && entries) { // TODO && (key != tt->key or depth >= tt->depth)
       _stores++;
       HashEntry* entry   = (entries + (key & keyMask));
       entry->positionKey = key;
       entry->moveBits    = bestmove.GetBits();
       entry->score       = static_cast<int16_t>(bestmove.GetScore());
       entry->depth       = static_cast<uint8_t>(depth);
-      entry->flags       = static_cast<uint8_t>(
-            primaryFlag | (extended ? HashEntry::Extended : 0));
+      entry->flags       = static_cast<uint8_t>(primaryFlag | otherFlags);
     }
   }
 
