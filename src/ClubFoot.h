@@ -46,6 +46,7 @@ public:
   std::string GetEngineName() const;
   std::string GetEngineVersion() const;
   std::string GetAuthorName() const;
+  std::string GetCountryName() const;
   std::string GetFEN() const;
   std::list<senjo::EngineOption> GetOptions() const;
   bool SetEngineOption(const std::string& name, const std::string& value);

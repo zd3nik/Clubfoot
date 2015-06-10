@@ -231,7 +231,13 @@ std::string ClubFoot::GetEngineVersion() const
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetAuthorName() const
 {
-  return "Shawn Chidester <zd3nik@gmail.com>";
+  return "Shawn Chidester";
+}
+
+//----------------------------------------------------------------------------
+std::string ClubFoot::GetCountryName() const
+{
+  return "USA";
 }
 
 //----------------------------------------------------------------------------
