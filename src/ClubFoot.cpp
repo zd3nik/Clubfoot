@@ -215,7 +215,7 @@ EngineOption ClubFoot::_optTest("Experimental Feature", "0", EngineOption::Spin,
 //----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
 {
-  return "Clubfoot";
+  return (sizeof(void*) == 8) ? "Clubfoot" : "Clubfoot (32-bit)";
 }
 
 //----------------------------------------------------------------------------
