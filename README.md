@@ -3,13 +3,15 @@ Clubfoot
 
 By Shawn Chidester <zd3nik@gmail.com>
 
-This is a basic chess engine that started as an example for the [Senjo UCI adapter](https://github.com/zd3nik/SenjoUCIAdapter).  It was not my purpose to make this a serious engine.  But I'm having a lot of fun tinkering with it trying to make it stronger.
+This is a basic chess engine that started as an example for the [Senjo UCI adapter](https://github.com/zd3nik/SenjoUCIAdapter).  It was not my intent to make this a serious engine.  But I'm having a lot of fun tinkering with it trying to make it stronger.
 
 I want Clubfoot to be relatively small and written in a way that is easy to comprehend.  Unfortunately, some areas of code got to be a bit more complicated than I would like, particularly in move generation.  Making those areas of code simpler would have sacrificed too much in terms of capability and/or performance.
 
 ### No bitboards
 
-I've decided to see how strong this engine can be made without using bitboards.  Bitboards really are the way to go when writing a chess engine, but Clubfoot will remain sans bitboards.  Quality of static positional evaluation and speed of move generation suffer the most from this limitation.  I will do what I can to improve both of these areas over time.
+I've decided to see how strong I can make this engine without using bitboards.  Bitboards really are the way to go when writing a chess engine, but Clubfoot will remain sans bitboards.  Quality of static positional evaluation and speed of move generation suffer the most from this limitation.  I will do what I can to improve both of these areas over time.
+
+See [Bitfoot](https://github.com/zd3nik/Bitfoot) for a bitboard version of Clubfoot.
 
 ### Use recursive clone
 
@@ -46,24 +48,7 @@ I will periodically make binary builds of this engine available.  Please do not 
 
 * On the Microsoft Visual C++ Redistributable Package page (link provided above) click the `Download` button and choose `vcredist_x86.exe` for 32-bit, choose `vcredist_x64.exe` for 64-bit.  Install the package and try Clubfoot again.
 
-**NOTICE**: *These binaries are provided under the terms of the license described below.  Use them at your own risk.  I welcome feedback on the performance of Clubfoot but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
-
-* [Clubfoot-1.0.41ac4b3-windows-msvc2012.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjWTE0TG0tSjZQY1U&authuser=0)
-* md5sums:
- 
-  * `31c1703e4a519486f46b3c069210df79` Clubfoot-1.0.41ac4b3-windows-msvc2012.zip
-  * `a74283d3282373d7b50812fea03df513` Clubfoot-1.0.41ac4b3-win32.exe
-  * `fa52ca619298f91651820b219c92da30` Clubfoot-1.0.41ac4b3-win64.exe
-  * `b612c7e5b65b78c5cebf4c1acc419bf5` Clubfoot-Logo-Small.png
-
-
-* [Clubfoot-1.0.41ac4b3-linux-libc-2.20.zip](https://drive.google.com/open?id=0B3Bl0MPLTCLjOE1CeFVSMExtZ1E&authuser=0)
-* md5sums:
- 
-  * `8db28d52f6afae89d02610652e877d89` Clubfoot-1.0.41ac4b3-linux-libc-2.20.zip
-  * `dd4185254d20fa0229ea3e85626c4c2b` Clubfoot-1.0.41ac4b3-linux32
-  * `22ade37066ec71bedecffc58bbafdb44` Clubfoot-1.0.41ac4b3-linux64
-  * `b612c7e5b65b78c5cebf4c1acc419bf5` Clubfoot-Logo-Small.png
+**NOTICE**: *Binaries are provided under the terms of the license described below.  Use them at your own risk.  I welcome feedback on the performance of Clubfoot but I provide no warranty, no promises that it will work on your computer, and no form of technical support.*
 
 License
 -------
