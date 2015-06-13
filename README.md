@@ -39,6 +39,13 @@ Features
 * Static exchange evaluation.
 * Transposition table.
 
+Why is so much of the code in one header file?
+----------------------------------------------
+
+A very important feature of a chess program is speed.  Breaking things up into separate classes, functions, and especially different object files has negative performance implications.  I'm not an expert on compiler optimizations, but I know from experimentation that optimizers do much better when all your speed critical code is in one object file.
+
+And most of the code is in Clubfoot.h instead of Clubfoot.cpp because of the heavy use of templates.  It's possible to arrange things in such a way that template code can be placed in the cpp file, but I see no reason to jump through such hoops.  I'm just as happy looking at code in a file with a .h extension as I am looking at code in a file with a .cpp extension.
+
 Binary Downloads
 ----------------
 
