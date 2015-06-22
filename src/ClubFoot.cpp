@@ -486,7 +486,7 @@ const char* ClubFoot::SetPosition(const char* fen)
     Output() << "Expected 'w' or 'b' at " << p;
     return NULL;
   }
-  if (!*p || !isspace(*p++)) {
+  if (*p && !isspace(*p++)) {
     Output() << "Invalid character at " << p;
     return NULL;
   }
@@ -505,7 +505,7 @@ const char* ClubFoot::SetPosition(const char* fen)
     }
     break;
   }
-  if (!*p || !isspace(*p++)) {
+  if (*p && !isspace(*p++)) {
     Output() << "Invalid character at " << p;
     return NULL;
   }
@@ -523,7 +523,7 @@ const char* ClubFoot::SetPosition(const char* fen)
   else if (*p == '-') {
     p++;
   }
-  if (!*p || !isspace(*p)) {
+  if (*p && !isspace(*p)) {
     Output() << "Invalid character at " << p;
     return NULL;
   }
