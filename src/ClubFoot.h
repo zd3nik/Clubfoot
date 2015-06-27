@@ -670,20 +670,26 @@ private:
         score += PawnValue;
         break;
       case Move::Normal:
+        if ((ValueOf(cap) + 50) >= ValueOf(pc)) {
+          score += (ValueOf(cap) - (10 * (pc & ~1)));
+        }
+        else {
+          _board[toSqr] = pc;
+          _board[fromSqr] = 0;
+          score += (ValueOf(cap) - StaticExchange<!color>(to));
+          _board[fromSqr] = pc;
+          _board[toSqr] = cap;
+        }
+        break;
       case Move::PawnPush:
       case Move::PawnLung:
       case Move::PawnCapture:
-        _board[toSqr] = pc;
-        _board[fromSqr] = 0;
-        score += (ValueOf(cap) - StaticExchange<!color>(to));
-        _board[fromSqr] = pc;
-        _board[toSqr] = cap;
-        break;
       case Move::KingMove:
         score += ValueOf(cap);
         break;
       case Move::CastleShort:
       case Move::CastleLong:
+        score += 10;
         break;
       }
     }
