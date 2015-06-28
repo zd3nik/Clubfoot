@@ -252,6 +252,7 @@ std::list<EngineOption> ClubFoot::GetOptions() const
   opts.push_back(_optIID);
   opts.push_back(_optLMR);
   opts.push_back(_optNMP);
+  opts.push_back(_optOneReply);
   opts.push_back(_optRZR);
   opts.push_back(_optTempo);
   opts.push_back(_optTest);
