@@ -202,7 +202,7 @@ TranspositionTable  ClubFoot::_tt;
 EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
 EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
 EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optDelta("Delta Pruning Margin", "500", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optDelta("Delta Pruning Margin", "150", EngineOption::Spin, 0, 9999);
 EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
 EngineOption ClubFoot::_optLMR("Late Move Reduction", "1", EngineOption::Spin, 0, 3);

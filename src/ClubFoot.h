@@ -684,6 +684,17 @@ private:
       case Move::PawnPush:
       case Move::PawnLung:
       case Move::PawnCapture:
+        if (cap) {
+          score += ValueOf(cap);
+        }
+        else {
+          _board[toSqr] = pc;
+          _board[fromSqr] = 0;
+          score -= StaticExchange<!color>(to);
+          _board[fromSqr] = pc;
+          _board[toSqr] = cap;
+        }
+        break;
       case Move::KingMove:
         score += ValueOf(cap);
         break;
