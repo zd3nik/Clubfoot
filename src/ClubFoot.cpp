@@ -21,7 +21,6 @@
 //----------------------------------------------------------------------------
 
 #include "senjo/src/Output.h"
-#include "HashTable.h"
 #include "ClubFoot.h"
 
 using namespace senjo;
@@ -33,6 +32,51 @@ namespace clubfoot
 // for convenience
 //----------------------------------------------------------------------------
 static const std::string _TRUE = "true";
+
+//----------------------------------------------------------------------------
+// static ClubFoot class variables
+//----------------------------------------------------------------------------
+bool                ClubFoot::_ext = false;
+bool                ClubFoot::_iid = false;
+bool                ClubFoot::_initialized = false;
+bool                ClubFoot::_lmr = false;
+bool                ClubFoot::_nmp = false;
+bool                ClubFoot::_nmr = false;
+bool                ClubFoot::_oneReply = false;
+char                ClubFoot::_hist[0x100000] = {0};
+int                 ClubFoot::_board[128] = {0};
+int                 ClubFoot::_contempt = 0;
+int                 ClubFoot::_delta = 0;
+int                 ClubFoot::_depth = 0;
+int                 ClubFoot::_drawScore[2] = {0};
+int                 ClubFoot::_futility = 0;
+int                 ClubFoot::_movenum = 0;
+int                 ClubFoot::_rzr = 0;
+int                 ClubFoot::_seldepth = 0;
+int                 ClubFoot::_tempo = 0;
+int                 ClubFoot::_test = 0;
+std::string         ClubFoot::_currmove;
+int64_t             ClubFoot::_hashSize = 0;
+ClubFoot            ClubFoot::_node[MaxPlies];
+std::set<uint64_t>  ClubFoot::_seen;
+Stats               ClubFoot::_stats;
+Stats               ClubFoot::_totalStats;
+TranspositionTable  ClubFoot::_tt;
+
+EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
+EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
+EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
+EngineOption ClubFoot::_optDelta("Delta Pruning Margin", "0", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optFutility("Futility Pruning Delta", "200", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optLMR("Late Move Reductions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optNMR("Null Move Reductions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optOneReply("One Reply Extensions", _TRUE, EngineOption::Checkbox);
+EngineOption ClubFoot::_optRZR("Razoring Delta", "500", EngineOption::Spin, 0, 9999);
+EngineOption ClubFoot::_optTempo("Tempo Bonus", "0", EngineOption::Spin, 0, 50);
+EngineOption ClubFoot::_optTest("Experimental Feature", "0", EngineOption::Spin, 0, 9999);
 
 //----------------------------------------------------------------------------
 const int ClubFoot::_KING_SQR[128] = {
@@ -172,47 +216,6 @@ const int ClubFoot::_PIECE_SQR[12][128] = {
 };
 
 //----------------------------------------------------------------------------
-// static ClubFoot class variables
-//----------------------------------------------------------------------------
-bool                ClubFoot::_ext = false;
-bool                ClubFoot::_iid = false;
-bool                ClubFoot::_initialized = false;
-bool                ClubFoot::_nmp = false;
-bool                ClubFoot::_oneReply = false;
-char                ClubFoot::_hist[0x100000] = {0};
-int                 ClubFoot::_board[128] = {0};
-int                 ClubFoot::_contempt = 0;
-int                 ClubFoot::_delta = 0;
-int                 ClubFoot::_depth = 0;
-int                 ClubFoot::_drawScore[2] = {0};
-int                 ClubFoot::_lmr = 0;
-int                 ClubFoot::_movenum = 0;
-int                 ClubFoot::_rzr = 0;
-int                 ClubFoot::_seldepth = 0;
-int                 ClubFoot::_tempo = 0;
-int                 ClubFoot::_test = 0;
-std::string         ClubFoot::_currmove;
-int64_t             ClubFoot::_hashSize = 0;
-ClubFoot            ClubFoot::_node[MaxPlies];
-std::set<uint64_t>  ClubFoot::_seen;
-Stats               ClubFoot::_stats;
-Stats               ClubFoot::_totalStats;
-TranspositionTable  ClubFoot::_tt;
-
-EngineOption ClubFoot::_optHash("Hash", "1024", EngineOption::Spin, 0, 4096);
-EngineOption ClubFoot::_optClearHash("Clear Hash", "", EngineOption::Button);
-EngineOption ClubFoot::_optContempt("Contempt", "0", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optDelta("Delta Pruning Margin", "150", EngineOption::Spin, 0, 9999);
-EngineOption ClubFoot::_optEXT("Check Extensions", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optIID("Internal Iterative Deepening", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optLMR("Late Move Reduction", "1", EngineOption::Spin, 0, 3);
-EngineOption ClubFoot::_optNMP("Null Move Pruning", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optOneReply("One Reply Extensions", _TRUE, EngineOption::Checkbox);
-EngineOption ClubFoot::_optRZR("Razoring Delta", "500", EngineOption::Spin, 0, 9999);
-EngineOption ClubFoot::_optTempo("Tempo Bonus", "0", EngineOption::Spin, 0, 50);
-EngineOption ClubFoot::_optTest("Experimental Feature", "0", EngineOption::Spin, 0, 9999);
-
-//----------------------------------------------------------------------------
 std::string ClubFoot::GetEngineName() const
 {
   return (sizeof(void*) == 8) ? "Clubfoot" : "Clubfoot (32-bit)";
@@ -249,9 +252,11 @@ std::list<EngineOption> ClubFoot::GetOptions() const
   opts.push_back(_optContempt);
   opts.push_back(_optDelta);
   opts.push_back(_optEXT);
+  opts.push_back(_optFutility);
   opts.push_back(_optIID);
   opts.push_back(_optLMR);
   opts.push_back(_optNMP);
+  opts.push_back(_optNMR);
   opts.push_back(_optOneReply);
   opts.push_back(_optRZR);
   opts.push_back(_optTempo);
@@ -279,15 +284,21 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
       return true;
     }
   }
+  if (!stricmp(optionName.c_str(), _optDelta.GetName().c_str())) {
+    if (_optDelta.SetValue(optionValue)) {
+      _delta = static_cast<int>(_optDelta.GetIntValue());
+      return true;
+    }
+  }
   if (!stricmp(optionName.c_str(), _optEXT.GetName().c_str())) {
     if (_optEXT.SetValue(optionValue)) {
       _ext = (_optEXT.GetValue() == _TRUE);
       return true;
     }
   }
-  if (!stricmp(optionName.c_str(), _optDelta.GetName().c_str())) {
-    if (_optDelta.SetValue(optionValue)) {
-      _delta = static_cast<int>(_optDelta.GetIntValue());
+  if (!stricmp(optionName.c_str(), _optFutility.GetName().c_str())) {
+    if (_optFutility.SetValue(optionValue)) {
+      _futility = static_cast<int>(_optFutility.GetIntValue());
       return true;
     }
   }
@@ -299,13 +310,19 @@ bool ClubFoot::SetEngineOption(const std::string& optionName,
   }
   if (!stricmp(optionName.c_str(), _optLMR.GetName().c_str())) {
     if (_optLMR.SetValue(optionValue)) {
-      _lmr = static_cast<int>(_optLMR.GetIntValue());
+      _lmr = (_optLMR.GetValue() == _TRUE);
       return true;
     }
   }
   if (!stricmp(optionName .c_str(), _optNMP.GetName().c_str())) {
     if (_optNMP.SetValue(optionValue)) {
       _nmp = (_optNMP.GetValue() == _TRUE);
+      return true;
+    }
+  }
+  if (!stricmp(optionName.c_str(), _optNMR.GetName().c_str())) {
+    if (_optNMR.SetValue(optionValue)) {
+      _nmr = (_optNMR.GetValue() == _TRUE);
       return true;
     }
   }
@@ -351,13 +368,15 @@ void ClubFoot::Initialize()
   _hashSize = _optHash.GetIntValue();
   _contempt = static_cast<int>(_optContempt.GetIntValue());
   _delta    = static_cast<int>(_optDelta.GetIntValue());
-  _lmr      = static_cast<int>(_optLMR.GetIntValue());
+  _futility = static_cast<int>(_optFutility.GetIntValue());
   _rzr      = static_cast<int>(_optRZR.GetIntValue());
   _tempo    = static_cast<int>(_optTempo.GetIntValue());
   _test     = static_cast<int>(_optTest.GetIntValue());
   _ext      = (_optEXT.GetValue() == _TRUE);
   _iid      = (_optIID.GetValue() == _TRUE);
+  _lmr      = (_optLMR.GetValue() == _TRUE);
   _nmp      = (_optNMP.GetValue() == _TRUE);
+  _nmr      = (_optNMR.GetValue() == _TRUE);
   _oneReply = (_optOneReply.GetValue() == _TRUE);
 
   ClearHistory();
