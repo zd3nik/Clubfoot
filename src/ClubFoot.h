@@ -99,8 +99,8 @@ private:
   static bool                _nmp;            // null move pruning
   static bool                _nmr;            // null move reductions
   static bool                _oneReply;       // one reply extensions
+  static char                _board[128];     // piece positions
   static char                _hist[0x100000]; // move performance history
-  static int                 _board[128];     // piece positions
   static int                 _contempt;       // contempt for draw value
   static int                 _delta;          // delta pruning margin
   static int                 _depth;          // current root search depth
@@ -158,9 +158,9 @@ private:
   int       moveCount;       // number of moves in this node's 'moves' array
   int       moveIndex;       // which move in 'moves' array this node is on
   int       pvCount;         // move count in this node's principal variation
-  int       pieceCount[14];  // piece counts per type
   int       kingEval[2];     // king positional evaluation score per color
   char      passers[128];    // location of passers (2) and semi-passers (1)
+  char      pieceCount[14];  // piece counts per type
   char      openFile[2][8];  // files with no pawns (per color)
   ClubFoot* child;           // the node 1 ply after this node
   ClubFoot* parent;          // the node 1 ply before this one
@@ -267,6 +267,7 @@ private:
   //! Increment performance history for the given move
   //--------------------------------------------------------------------------
   inline void IncHistory(const Move& move, const bool check, const int depth) {
+    assert(move.IsValid());
     assert(depth >= 0);
     if (!check) {
       const int idx = move.GetHistoryIndex();
@@ -1830,7 +1831,7 @@ private:
         if ((tmp = (sqr + (color ? senjo::South : senjo::North))).IsValid() &&
             _board[tmp.Name()])
         {
-          bonus -= (bonus /= 4);
+          bonus -= (bonus / 4);
           passed = false; // allow backward pawn penalty
         }
 
@@ -1963,119 +1964,74 @@ private:
   //--------------------------------------------------------------------------
   template<Color color>
   inline int KingEval(const senjo::Square& sqr) {
-    assert(sqr == king[color]);
-    senjo::Square tmp;
-    senjo::Square t2;
-    const int y = sqr.Y();
+    assert(sqr.Name() == king[color]);
     int score = SquareValue((color|King), sqr.Name());
     int val = 0;
-
-    // penalty for being in front of own pieces
-    for (tmp = (sqr + (color ? senjo::North : senjo::South)); tmp.IsValid();
-         tmp += (color ? senjo::North : senjo::South))
-    {
-      const int pc = _board[tmp.Name()];
-      if (pc) {
-        switch (pc) {
-        case (color|Pawn):
-          score -= 16;
-          break;
-        case (color|Knight):
-        case (color|Bishop):
-        case (color|Rook):
-        case (color|Queen):
-          score -= 8;
-          break;
-        }
-        break; // loop
-      }
-    }
 
     // penalty for open files on side of the board where the king is
     // bonus for pawn shield
     // penalty for pawn storm
+    const int y = sqr.Y();
+    int x;
+    int xend;
     switch (sqr.X()) {
     case 0: case 1: case 2:
-      val += (8 * (openFile[!color][0] + openFile[!color][1] +
-                   openFile[!color][2] +
-                   openFile[ color][0] + openFile[ color][1] +
-                   openFile[ color][2]));
-      for (tmp = senjo::Square(0, (y + (color ? senjo::South : senjo::North)));
-           tmp.IsValid() && (tmp.X() < 3); ++tmp)
-      {
-        switch (_board[tmp.Name()]) {
-          case (color|Pawn):    val += 10; break;
-          case ((!color)|Pawn): val -= 10; break;
-        }
-        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
-          switch (_board[t2.Name()]) {
-            case (color|Pawn):    val += 5; break;
-            case ((!color)|Pawn): val -= 8; break;
-          }
-          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
-            switch (_board[t2.Name()]) {
-              case ((!color)|Pawn): val -= 6; break;
-            }
-          }
-        }
-      }
+      x = 0;
+      xend = 2;
+      val -= (16 * (openFile[!color][0] + openFile[!color][1] +
+                    openFile[!color][2]));
       break;
     case 3: case 4:
-      val += (8 * (openFile[!color][2] + openFile[!color][3] +
-                   openFile[!color][4] + openFile[!color][5] +
-                   openFile[ color][2] + openFile[ color][3] +
-                   openFile[ color][4] + openFile[ color][5]));
-      for (tmp = senjo::Square(2, (y + (color ? senjo::South : senjo::North)));
-           tmp.IsValid() && (tmp.X() < 6); ++tmp)
-      {
-        switch (_board[tmp.Name()]) {
-          case (color|Pawn):    val += 10; break;
-          case ((!color)|Pawn): val -= 10; break;
-        }
-        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
-          switch (_board[t2.Name()]) {
-            case (color|Pawn):    val += 5; break;
-            case ((!color)|Pawn): val -= 8; break;
-          }
-          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
-            switch (_board[t2.Name()]) {
-              case ((!color)|Pawn): val -= 6; break;
-            }
-          }
-        }
-      }
+      x = 2;
+      xend = 5;
+      val -= (16 * (openFile[!color][2] + openFile[!color][3] +
+                    openFile[!color][4] + openFile[!color][5]));
       break;
     case 5: case 6: case 7:
-      val += (8 * (openFile[!color][5] + openFile[!color][6] +
-                   openFile[!color][7] +
-                   openFile[ color][5] + openFile[ color][6] +
-                   openFile[ color][7]));
-      for (tmp = senjo::Square(5, (y + (color ? senjo::South : senjo::North)));
-           tmp.IsValid() && (tmp.X() < 8); ++tmp)
-      {
-        switch (_board[tmp.Name()]) {
-          case (color|Pawn):    val += 10; break;
-          case ((!color)|Pawn): val -= 10; break;
-        }
-        if ((t2 = (tmp + (color ? senjo::South : senjo::North))).IsValid()) {
-          switch (_board[t2.Name()]) {
-            case (color|Pawn):    val += 5; break;
-            case ((!color)|Pawn): val -= 8; break;
-          }
-          if ((t2 += (color ? senjo::South : senjo::North)).IsValid()) {
-            switch (_board[t2.Name()]) {
-              case ((!color)|Pawn): val -= 6; break;
-            }
-          }
-        }
-      }
+      x = 5;
+      xend = 7;
+      val -= (16 * (openFile[!color][5] + openFile[!color][6] +
+                    openFile[!color][7]));
       break;
     default:
       assert(false);
+      x = xend = 0;
     }
+    for (; x <= xend; ++x) {
+      for (senjo::Square tmp(x, (color ? 6 : 1)); tmp.IsValid();
+           tmp += (color ? senjo::South : senjo::North))
+      {
+        switch (_board[tmp.Name()]) {
+        case (color|Pawn):
+          if (color ? (y >= tmp.Y()) : (y <= tmp.Y())) {
+            val += (2 * (8 - sqr.DistanceTo(tmp)));
+          }
+          else {
+            val -= (4 * sqr.DistanceTo(tmp));
+          }
+          break;
+        case ((!color)|Pawn):
+          if (color ? (y < tmp.Y()) : (y > tmp.Y())) {
+            val -= 16;
+          }
+          else {
+            val -= (2 * (8 - sqr.DistanceTo(tmp)));
+          }
+          break;
+        }
+      }
+    }
+
+    // TODO penalty for enemy attacks near the king
+    //      penalty increased if friendly pieces far away
+    // TODO penalty for unprotected squares around king
+
     if (val) {
-      score -= static_cast<int>(MidGame(color) * val);
+      score += static_cast<int>(MidGame(color) * val);
     }
+
+    // TODO endgame scoring
+    // TODO keep close to pawns, especially passers (friend or foe)
 
     kingEval[color] = score;
     return score;
