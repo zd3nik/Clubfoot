@@ -43,8 +43,8 @@ bool                ClubFoot::_lmr = false;
 bool                ClubFoot::_nmp = false;
 bool                ClubFoot::_nmr = false;
 bool                ClubFoot::_oneReply = false;
+char                ClubFoot::_board[128] = {0};
 char                ClubFoot::_hist[0x100000] = {0};
-int                 ClubFoot::_board[128] = {0};
 int                 ClubFoot::_contempt = 0;
 int                 ClubFoot::_delta = 0;
 int                 ClubFoot::_depth = 0;
@@ -400,7 +400,7 @@ const char* ClubFoot::SetPosition(const char* fen)
     return NULL;
   }
 
-  int tmpBoard[128];
+  char tmpBoard[128];
   int kingPosition[2] = { -1, -1 };
   int materialTotal[2] = { 0, 0 };
   int moveCount = 0;
