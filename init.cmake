@@ -7,9 +7,10 @@ if (NOT CMAKE_INITIALIZED)
 
     file(STRINGS "${CMAKE_SOURCE_DIR}/.git/refs/heads/master" GIT_REV)
     message("-- GIT_REV ${GIT_REV}")
+    set(CMAKE_CXX_FLAGS "-DGIT_REV=${GIT_REV} ${CMAKE_CXX_FLAGS}")
 
-    if (NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-        set(CMAKE_CXX_FLAGS "-DGIT_REV=${GIT_REV} -fPIC -m64 -Wall -Wextra -Wpedantic ${CMAKE_CXX_FLAGS}")
+    if(CMAKE_COMPILER_IS_GNUCXX)
+        set(CMAKE_CXX_FLAGS "-fPIC -m64 -Wall -Wextra -Wpedantic ${CMAKE_CXX_FLAGS}")
     endif()
 
     set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
