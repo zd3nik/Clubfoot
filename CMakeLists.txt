@@ -1,6 +1,18 @@
-cmake_minimum_required(VERSION 3.1)
+cmake_minimum_required(VERSION 3.10)
 
-include(init.cmake)
+execute_process(
+  COMMAND git log "--pretty=format:%H" -n 1
+  OUTPUT_VARIABLE GIT_REV)
+
+message("-- GIT_REV ${GIT_REV}")
+
+set(CMAKE_CXX_STANDARD 14)
+add_compile_definitions(GIT_REV=${GIT_REV})
+if(WIN32)
+    add_compile_options(/EHsc)
+else()
+    add_compile_options(-fPIC -m64 -Wall -Wextra -Wpedantic)
+endif()
 
 #-----------------------------------------------------------------------------
 # Build senjo lib
@@ -71,4 +83,5 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/epd" "${CMAKE_BINARY_DIR}/epd"
     COMMENT "Copying EPD test files"
 )
+
 
